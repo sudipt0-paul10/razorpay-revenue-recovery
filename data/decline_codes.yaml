@@ -1,0 +1,534 @@
+# Source of truth for gate decisions. data/decline_codes.md is the human view.
+# tests/test_decline_codes_sync.py asserts the two agree.
+#
+# PROVENANCE CONTRACT
+#   doc_description  -> [CITE]  verbatim-sourced from source_url
+#   classification   -> PROJECT POLICY. Not prescribed by Razorpay.
+#   timing           -> [ASSUMPTION] always. No backoff here comes from Razorpay.
+#   basis            -> why the classification is what it is:
+#                       doc_supported         documented next step supports this action
+#                       project_inference     our reasoning from the documented mechanism
+#                       fail_safe             docs insufficient; conservative branch
+#                       project_safety_policy we deliberately do NOT follow the doc's advice
+#                       swept                 unresolved; [MODEL] param, see sensitivity.md
+
+meta:
+  version: 3
+  verified_on: 2026-08-25
+  sources:
+    cards:
+      url: https://razorpay.com/docs/errors/payments/cards/
+      status: verified
+    upi:
+      url: https://razorpay.com/docs/errors/payments/upi/
+      status: verified
+    error_params:
+      url: https://razorpay.com/docs/errors/payments/payment-methods-error-parameters/
+      status: partial       # cards source enum verified; UPI tab did not render
+    list:
+      url: https://razorpay.com/docs/errors/payments/list/
+      status: not_machine_readable
+
+# ---------------------------------------------------------------- defaults
+defaults:
+  unknown_code:
+    retry_class: NO_RETRY
+    resolution: MERCHANT_ESCALATION
+    agent_action: escalate_unknown_failure
+    basis: fail_safe
+    rationale: >
+      Never retry an unmapped code. Do NOT assume the instrument needs updating:
+      we do not know that, and asking a customer to replace a working card
+      because we hit an unmapped code is wrong and confusing.
+  unknown_source:
+    behaviour: conservative_subcase
+    basis: fail_safe
+  ambiguous_subcase:
+    behaviour: least_retryable_wins
+    basis: fail_safe
+  global_caps:
+    max_payment_attempts: 3
+    max_total_actions: 8
+    episode_window_days: 30
+    provenance: ASSUMPTION     # self-imposed; no sourced network limit
+    note: "See decline_codes.md 11. Do not cite network retry rules from memory."
+
+# ---------------------------------------------------------------- cohort scope
+cohort_scope:
+  unit: unattended_mandate_debit
+  exclude_context: attended_only
+  provenance: PROJECT_ASSUMPTION
+  rationale: >
+    Razorpay does not classify codes by attendedness. Our inference: no customer
+    is present during an unattended debit, so interactive-checkout failures
+    cannot occur. Scope decision, not a documented fact.
+  enforced_by: tests/test_no_attended_codes.py
+
+# ---------------------------------------------------------------- source routing
+source_routing:
+  cards:
+    provenance: CITE           # enum verified on error_params page
+    values:
+      issuer_bank:   {routing: needs_reason,            basis: project_inference}
+      gateway:       {routing: transient_default,       basis: project_inference}
+      internal:      {routing: transient_default,       basis: project_inference}
+      customer:      {routing: customer_action_default, basis: project_inference}
+      business:
+        routing: exclude_from_cohort
+        basis: project_inference
+        provenance: PROJECT_ASSUMPTION
+        rationale: "Our integration bug is not a recovery episode. Design decision, not a Razorpay statement."
+  upi:
+    provenance: UNVERIFIED
+    values: {}
+    note: >
+      UPI tab on the error_params page did not render. Values cited elsewhere
+      (customer_psp, network, beneficiary_bank) are NOT entered here because we
+      have not confirmed them. Confirm in a browser or leave UPI on the
+      fail-safe path. Do not add plausible-looking enum values.
+
+step_mappings:
+  status: unverified
+  blocking_sim_v1: false
+  shipped_fallback: route_on_source_only_then_conservative_subcase
+  reporting_obligation: "results/ must report how often the fallback fired."
+
+# ---------------------------------------------------------------- swept policies
+swept_policies:
+  txn_limit_policy:
+    applies_to: [transaction_limit_exceeded]
+    default: P2
+    options:
+      P1:
+        retry_class: NO_RETRY
+        resolution: CUSTOMER_ACTION
+        agent_action: contact_update_instrument
+        rationale: "Follow the documented recommendation literally: use another card."
+      P2:
+        retry_class: RETRY_TIMED
+        resolution: NONE_NEEDED
+        agent_action: retry_payment
+        timing: {backoff_hours: 26, max_attempts: 1, provenance: ASSUMPTION}
+        then: contact_update_instrument
+        rationale: >
+          Documented mechanism is a DAILY limit, which resets. The documented
+          remedy (different card) assumes attended checkout; an unattended
+          mandate is bound to one instrument and cannot switch. No compliance
+          risk: a daily limit is not a fraud signal.
+    basis: swept
+    model_param: true
+
+# ---------------------------------------------------------------- CARD CODES
+codes:
+
+  - code: insufficient_funds
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer's bank account did not have enough funds to complete the transaction."
+    classification:
+      context: unattended_capable
+      retry_class: RETRY_TIMED
+      resolution: NONE_NEEDED
+      agent_action: retry_payment
+      basis: project_inference
+      basis_note: "Docs advise ensuring adequate balance; they do not recommend retrying. Transience is our inference."
+    timing: {backoff_hours: 24, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: bank_technical_error
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "There was a downtime on the customer's bank."
+    classification:
+      context: unattended_capable
+      retry_class: RETRY_TIMED
+      resolution: NONE_NEEDED
+      agent_action: retry_payment
+      basis: project_inference
+      basis_note: "Docs recommend a different bank and the Downtime API, not a retry. Transience inferred from 'downtime'."
+    timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: gateway_technical_error
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "There was a downtime on Razorpay's partner bank."
+    classification:
+      context: unattended_capable
+      retry_class: RETRY_TIMED
+      resolution: NONE_NEEDED
+      agent_action: retry_payment
+      basis: project_inference
+      basis_note: >
+        The CARD page recommends multi-terminal routing and never mentions retrying.
+        This differs from the UPI page for the same code name, which does. Do not
+        apply one rule to both.
+    timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: transaction_limit_exceeded
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer has already reached the maximum transaction limit on their card for the day. Docs recommend a different card or alternative payment method."
+    classification:
+      context: unattended_capable
+      basis: swept
+      governed_by: swept_policies.txn_limit_policy
+
+  - code: card_expired
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer's card is expired."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: doc_supported
+
+  - code: card_not_enrolled
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The card was not activated or enabled by the customer for online transactions."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: doc_supported
+    equivalent_description_to: [card_disabled_for_online_payments, debit_instrument_inactive]
+    note: "Distinct code emitted separately by Razorpay. Not collapsed."
+
+  - code: card_disabled_for_online_payments
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The card was not activated or enabled by the customer for online transactions."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: doc_supported
+    equivalent_description_to: [card_not_enrolled, debit_instrument_inactive]
+
+  - code: debit_instrument_inactive
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The card was not activated or enabled by the customer for online transactions."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: doc_supported
+    equivalent_description_to: [card_not_enrolled, card_disabled_for_online_payments]
+
+  - code: debit_instrument_blocked
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The card is blocked, either by the customer or their bank."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: doc_supported
+
+  - code: card_declined
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "Declined by the customer's bank. Razorpay may not have access to the specific failure reason, as banks typically do not provide it."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: fail_safe
+    report_separately: true
+    note: >
+      Important ambiguous bucket: the underlying reason is often unavailable, so a
+      transient decline becomes a lost retry. We make NO claim about production
+      volume. Our modelled weight is 25% (EVAL.md 3.2), a [MODEL] param.
+
+  - code: payment_failed
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "Declined by the customer's bank. Equivalent documented description to card_declined."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_update_instrument
+      basis: fail_safe
+    report_separately: true
+
+  - code: payment_risk_check_failed
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer's bank declined the payment, citing it as fraudulent. Docs recommend advising the customer to attempt payment with another card."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: MERCHANT_ESCALATION
+      agent_action: stop_episode
+      basis: project_safety_policy
+      basis_note: >
+        We deliberately do NOT follow the documented recommendation. It assumes a
+        human at checkout choosing another card. We judge automated instrument
+        cycling after a fraud decline unacceptable in an unattended agent, and the
+        buildathon disqualifies offense-capable tooling. Razorpay does not
+        characterise this pattern; the judgement is ours.
+    reason_code: RISK_DECLINE_STOP
+    hard_stop: true
+    enforced_by: tests/test_gate_risk_stop.py
+
+  - code: payment_cancelled
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    subcases:
+      - name: customer_cancelled
+        when: {source: customer}
+        doc_description: "The customer cancelled the transaction or pressed the back button during processing."
+        classification:
+          context: attended_only
+          basis: doc_supported
+        excluded_from_cohort: true
+      - name: bank_downtime
+        when: {source: issuer_bank}
+        doc_description: "There was a downtime on the customer's bank."
+        classification:
+          context: unattended_capable
+          retry_class: RETRY_TIMED
+          resolution: NONE_NEEDED
+          agent_action: retry_payment
+          basis: project_inference
+        timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: payment_timed_out
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer exceeded the time limit for payment processing, typically 10 minutes."
+    classification: {context: attended_only, basis: doc_supported}
+    excluded_from_cohort: true
+
+  - code: authentication_failed
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer entered incorrect OTP/verification details, or closed the browser during the authentication stage."
+    classification: {context: attended_only, basis: doc_supported}
+    excluded_from_cohort: true
+
+  - code: incorrect_cvv
+    method: card
+    source_url: https://razorpay.com/docs/errors/payments/cards/
+    verified: true
+    doc_description: "The customer entered an incorrect CVV during the payment process."
+    classification: {context: attended_only, basis: doc_supported}
+    excluded_from_cohort: true
+
+# ---------------------------------------------------------------- UPI CODES
+
+  - code: insufficient_funds
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "The customer's bank account did not have enough funds to complete the transaction."
+    classification:
+      context: unattended_capable
+      retry_class: RETRY_TIMED
+      resolution: NONE_NEEDED
+      agent_action: retry_payment
+      basis: project_inference
+    timing: {backoff_hours: 24, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: bank_technical_error
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "The payment failed due to a downtime on the UPI provider."
+    classification:
+      context: unattended_capable
+      retry_class: RETRY_TIMED
+      resolution: NONE_NEEDED
+      agent_action: retry_payment
+      basis: project_inference
+      basis_note: "Different documented cause from the card code of the same name (customer's bank vs UPI provider)."
+    timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: gateway_technical_error
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    subcases:
+      - name: partner_bank_technical
+        doc_description: "Technical issues from the partner bank. Docs recommend advising customers to attempt the transaction again after some time."
+        classification:
+          context: unattended_capable
+          retry_class: RETRY_TIMED
+          resolution: NONE_NEEDED
+          agent_action: retry_payment
+          basis: doc_supported
+          basis_note: "The only retry rule in this file with direct documentary support. Contrast the card version, which has none."
+        timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+      - name: partner_bank_downtime
+        doc_description: "The payment failed due to a downtime on the partner bank."
+        classification:
+          context: unattended_capable
+          retry_class: RETRY_TIMED
+          resolution: NONE_NEEDED
+          agent_action: retry_payment
+          basis: project_inference
+        timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: payment_declined
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "The funds could not be debited from the customer's bank account. Docs suggest the customer make another attempt."
+    classification:
+      context: unattended_capable
+      retry_class: RETRY_TIMED
+      resolution: NONE_NEEDED
+      agent_action: retry_payment
+      basis: doc_supported
+      basis_note: "Funds-adjacent, not a generic decline. An earlier draft misread this as generic."
+    timing: {backoff_hours: 24, max_attempts: 2, provenance: ASSUMPTION}
+
+  - code: credit_failed
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    subcases:
+      - name: bank_account_mismatch
+        doc_description: "The customer selected a different bank account from the one used at registration with the business."
+        classification:
+          context: unattended_capable
+          retry_class: NO_RETRY
+          resolution: CUSTOMER_ACTION
+          agent_action: contact_use_registered_account
+          basis: doc_supported
+      - name: partner_bank_downtime
+        doc_description: "The payment failed due to a downtime on the partner bank."
+        classification:
+          context: unattended_capable
+          retry_class: RETRY_TIMED
+          resolution: NONE_NEEDED
+          agent_action: retry_payment
+          basis: project_inference
+        timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+  - code: invalid_vpa
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "The customer is not a valid user on the UPI app. Docs advise completing registration by linking a bank account to the VPA, then re-attempting."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: CUSTOMER_ACTION
+      agent_action: contact_complete_upi_registration
+      basis: doc_supported
+
+  - code: vpa_resolution_failed
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "Failed to process the transaction using the customer's UPI ID. Docs direct merchants to raise a ticket with technical support."
+    classification:
+      context: unattended_capable
+      retry_class: NO_RETRY
+      resolution: MERCHANT_ESCALATION
+      agent_action: escalate_support_ticket
+      basis: doc_supported
+      basis_note: "Do not retry, do not contact the customer. The documented remedy is merchant-side."
+
+  - code: payment_cancelled
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "The customer cancelled the transaction or pressed the back button during processing."
+    classification: {context: attended_only, basis: doc_supported}
+    excluded_from_cohort: true
+
+  - code: payment_collect_request_expired
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    doc_description: "The customer exceeded the time limit for payment processing, typically 10 minutes."
+    classification: {context: attended_only, basis: doc_supported}
+    excluded_from_cohort: true
+
+  - code: payment_timed_out
+    method: upi
+    source_url: https://razorpay.com/docs/errors/payments/upi/
+    verified: true
+    subcases:
+      - name: customer_exceeded_time_limit
+        doc_description: "The customer exceeded the time limit for payment processing, typically 10 minutes."
+        classification: {context: attended_only, basis: doc_supported}
+        excluded_from_cohort: true
+      - name: partner_bank_downtime
+        doc_description: "The payment failed due to a downtime at the partner bank."
+        classification:
+          context: unattended_capable
+          retry_class: RETRY_TIMED
+          resolution: NONE_NEEDED
+          agent_action: retry_payment
+          basis: project_inference
+        timing: {backoff_hours: 6, max_attempts: 3, provenance: ASSUMPTION}
+
+# ---------------------------------------------------------------- UNVERIFIED
+unverified:
+  policy:
+    retry_class: NO_RETRY
+    agent_action: escalate_unknown_failure
+    may_be_emitted_by_simulator: false
+    enforced_by: tests/test_unverified_not_emitted.py
+    promotion_rule: >
+      A code is promoted ONLY when it appears on a Razorpay payment-error page
+      with a documented failure description and next step, with a working anchor
+      link. Appearance in an unrelated integration or API-reference page does NOT
+      count as verification.
+  codes:
+    - incorrect_otp
+    - otp_expired
+    - otp_attempts_exceeded
+    - incorrect_pin
+    - pin_attempts_exceeded
+    - card_number_invalid
+    - incorrect_card_details
+    - incorrect_card_expiry_date
+    - incorrect_cardholder_name
+    - international_transaction_not_allowed
+    - transaction_daily_limit_exceeded      # may duplicate card transaction_limit_exceeded
+    - transaction_frequency_limit_exceeded
+    - upi_app_technical_error
+    - authorisation_declined_by_psp
+    - psp_app_not_available
+
+# ---------------------------------------------------------------- BLOCKING GAP
+mandate_failures_pending:
+  blocking_sim_v1: true
+  verify_against: "Razorpay Subscriptions / eMandate / Recurring Payments documentation (NOT the card or UPI error pages)"
+  rationale: >
+    These are the codes where a wrong retry is a compliance failure rather than a
+    wasted rupee. An agent that handles insufficient_funds well but retries a
+    revoked mandate fails the track's bar.
+  codes:
+    - mandate_revoked_or_cancelled
+    - mandate_expired
+    - debit_amount_exceeds_registered_max
+    - pre_debit_notification_failure
+    - account_closed_or_frozen

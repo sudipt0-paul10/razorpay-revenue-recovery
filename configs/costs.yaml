@@ -1,0 +1,54 @@
+# Cost model for synthetic recovery evaluation.
+# Every numeric value is labelled CITE or ASSUMPTION.
+# Cited communication prices are provider reference prices; the simulator does not claim
+# the merchant actually uses that provider.
+
+currency: INR
+
+gateway:
+  failed_attempt_cost_inr: 0.00 # CITE: Razorpay standard pricing says platform fees are charged only on successful transactions.
+  successful_capture_fee_rate: 0.0236 # CITE: Razorpay standard domestic rate 2% + 18% GST on the platform fee = 2.36% effective.
+  note: "The 0.00 failed-attempt fee is a pricing-model input, not a claim that no bank/network/operational cost exists."
+
+messaging:
+  sms:
+    cost_inr: 0.18 # CITE: MSG91 India-to-India SMS pricing page, 30,000-message tier; rate shown before GST.
+    provider: "MSG91"
+    pricing_tier: "30,000 SMS"
+    gst_included: false # CITE: MSG91 pricing page states listed rate excludes GST.
+  email:
+    cost_inr: 0.02 # CITE: MSG91 India email pricing page, Starter plan extra-email rate.
+    provider: "MSG91"
+    pricing_tier: "Starter extra-email rate"
+    gst_included: false # CITE: MSG91 pricing page states listed prices exclude GST.
+  whatsapp:
+    cost_inr: 0.115 # CITE: MSG91 WhatsApp India utility/authentication rate.
+    provider: "MSG91"
+    category: "utility"
+    gst_included: false # CITE: MSG91 pricing page states listed prices exclude GST.
+  voice_per_minute:
+    cost_inr: 1.00 # ASSUMPTION: round-number simulation cost; provider rates vary by destination/network and plan.
+    provider: "generic reference"
+    gst_included: false # ASSUMPTION: GST is excluded from the synthetic cost model unless explicitly added below.
+
+annoyance:
+  per_contact_inr: 1.00 # ASSUMPTION: synthetic customer-annoyance penalty; must be included in sensitivity analysis.
+  applies_to:
+    - sms
+    - email
+    - whatsapp
+    - voice
+
+llm:
+  input_cost_inr_per_1k_tokens: 0.50 # ASSUMPTION: provisional placeholder until the exact model/version is pinned.
+  output_cost_inr_per_1k_tokens: 1.50 # ASSUMPTION: provisional placeholder until the exact model/version is pinned.
+  note: "These two LLM prices must be replaced with the actual pinned model's current pricing before the final eval-spec-v1 tag if the chosen provider exposes a public price."
+
+tax:
+  communication_gst_rate: 0.18 # CITE: MSG91 pricing pages state prices are exclusive of 18% GST.
+  apply_to_cited_provider_costs: true # ASSUMPTION: modelling choice for the synthetic cost ledger.
+  apply_to_llm_costs: false # ASSUMPTION: until the selected model/provider's tax treatment is known.
+
+accounting:
+  net_recovered_formula: "gross_recovered - successful_capture_processing_fee - failed_attempt_cost - contact_cost - annoyance_cost - llm_cost"
+  rounding_precision_inr: 0.01 # ASSUMPTION: ledger/reporting precision.
