@@ -68,8 +68,10 @@ Excluded as `attended_only`: `authentication_failed`, `incorrect_cvv`, `payment_
 | 2 | Cards Error Codes | https://razorpay.com/docs/errors/payments/cards/ | ✅ 17 entries verified 25 Aug 2026 |
 | 3 | UPI Error Codes | https://razorpay.com/docs/errors/payments/upi/ | ✅ 11 entries verified 25 Aug 2026 |
 | 4 | Payment Method Error Parameters | https://razorpay.com/docs/errors/payments/payment-methods-error-parameters/ | ⚠️ **Cards** `source` values verified; UPI tab did not render |
+| 5 | Subscription Payment Retries | https://razorpay.com/docs/payments/subscriptions/payment-retries/ | ✅ verified 26 Aug 2026 |
+| 6 | Subscription States | https://razorpay.com/docs/payments/subscriptions/states/ | ✅ verified 26 Aug 2026 |
 
-Snapshots of pages 2–4 as retrieved are committed under `data/sources/`.
+Snapshots of pages 2–4 as retrieved are committed under `data/sources/`. Pages 5–6 support EVAL.md §1.1 and §1.3, not the card/UPI decline taxonomy below; see §3.3.
 
 ### 3.1 `source` routing
 
@@ -90,6 +92,17 @@ Verified card `source` values `[CITE]`: `customer`, `business`, `internal`, `gat
 The gate keys on `(code, source, step)`. The `step` enum is in a tab on page 4 that did not render and is unverified.
 
 **Shipped behaviour until resolved:** sub-case codes route on `source` alone and fall through to the conservative sub-case (rule 4). This is correct-by-construction, only less precise. Sub-case codes are ~9% of the modelled mix, so this does not block `sim-v1` — but the fallback is documented shipped behaviour, not a silent gap, and `results/` must report how often it fired.
+
+### 3.3 Subscription retry and state facts — supports EVAL.md §1.1, §1.3
+
+These two facts are the load-bearing `[CITE]`s named in EVAL.md §10's freeze checklist. They are about subscription retry/state mechanics, not the card/UPI decline taxonomy in §4–§9 below; `data/decline_codes.yaml`'s `subscriptions:` block is their machine-readable counterpart.
+
+| Fact | Source | Location | Verified text | Basis |
+|---|---|---|---|---|
+| Manual charging of a domestic card is not supported | Page 5 | "Watch Out!" box under *Manual Charge on Same Card* | "Manual charging of a domestic card is not supported." Same page also confirms failed payments are retried automatically the next day, without merchant interference. | `doc_supported` |
+| Halted-state behaviour | Page 6 | *Halted* section | A Subscription enters `halted` once the final auto-charge fails and all retries are exhausted; invoices continue to generate but no auto-charge is attempted; once the Subscription returns to `active`, previous charges are not re-attempted and only future billing cycles are charged. | `doc_supported` |
+
+Retrieved and verified: 26 August 2026.
 
 ---
 

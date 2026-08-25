@@ -8,6 +8,7 @@ currency: INR
 gateway:
   failed_attempt_cost_inr: 0.00 # CITE: Razorpay standard pricing says platform fees are charged only on successful transactions.
   successful_capture_fee_rate: 0.0236 # CITE: Razorpay standard domestic rate 2% + 18% GST on the platform fee = 2.36% effective.
+  recurring_subscription_addon_inr: null # EVAL.md §5.1: [CITE-PENDING] on razorpay.com/pricing. Left swept, not verified or invented — excluded from net_recovered_formula until a value is sourced or a sweep cell is defined.
   note: "The 0.00 failed-attempt fee is a pricing-model input, not a claim that no bank/network/operational cost exists."
 
 messaging:

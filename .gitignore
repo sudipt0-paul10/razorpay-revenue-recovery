@@ -5,6 +5,11 @@
 __pycache__/
 *.py[cod]
 
+# Build artefacts (pip install -e . writes src/*.egg-info)
+*.egg-info/
+build/
+dist/
+
 # Pytest
 .pytest_cache/
 

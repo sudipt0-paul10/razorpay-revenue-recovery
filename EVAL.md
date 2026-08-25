@@ -110,7 +110,7 @@ Weights live in `configs/population.yaml`. This table is produced by `make docs`
 
 These map onto Razorpay's four documented subscription failure reasons `[CITE]` (expired card, bank-blocked card, insufficient balance, customer-cancelled mandate) using verified card decline codes. Weights are `[MODEL]`.
 
-`tests/test_population_matches_decline_codes.py` asserts every entry exists in `data/decline_codes.yaml`, is `verified: true`, is `context: unattended_capable`, is not in any `unverified` list, and that weights sum to 1.0.
+`tests/test_population_matches_decline_codes.py` asserts every entry exists in `data/decline_codes.yaml`, is `verified: true`, is `in_v1_cohort: true`, is not in any `unverified` list, and that weights sum to 1.0. (`in_v1_cohort` supersedes the v3 `context: unattended_capable` field under the v4 schema; `context: attended_only` remains only as an annotation on excluded codes.)
 
 **Issuer downtime is not modelled in v1.** The agent cannot act on it — it has no retry control — so it would add variance without decision-relevant structure. Stated as a scope decision, not an oversight.
 
@@ -177,3 +177,80 @@ contact_history[] : (ts, channel, remedy, delivered, engaged)
                     — includes Razorpay's automatic email as an entry
 
 budget_remaining : contacts
+```
+
+---
+
+## 5. Metrics
+
+**Primary (Regime B — counted)**
+- **Invoice recovery rate** — failed invoice paid within the window
+- **Subscription rescue rate** — Subscription returns to `active` within the window
+- Contacts per invoice recovered; contacts per subscription rescued
+- **Total contacts across the cohort** — the ratio alone misleads when outcome counts differ
+- Median and p90 time-to-rescue
+
+**Secondary (Regime A — monetised)**
+- Net value = invoice ₹ recovered + preserved LTV − contact costs − LLM cost − expected cancellation cost
+- Cancellations attributable to contact volume
+
+**Broken out separately:** the `card_declined` / `payment_failed` bucket (24% of the population, where the fail-safe costs most), and the `cancelled`-at-open bucket (5%, where the correct answer is to do nothing).
+
+### 5.1 Cost model (`configs/costs.yaml`)
+
+| Item | Value | Tag |
+|---|---|---|
+| Failed attempt — gateway fee | ₹0 | `[CITE]` charged on success only |
+| Successful capture — base domestic | 2% + 18% GST ≈ 2.36% | `[CITE]` |
+| Recurring/subscription add-on | `[CITE-PENDING]` — verify on `razorpay.com/pricing` or leave swept |
+| SMS / Email / WhatsApp utility | ₹0.18 / ₹0.02 / ₹0.115 | `[CITE]` provider, tier, retrieval date in config |
+| LLM inference | measured per run | `PLACEHOLDER` until the model is pinned |
+| Cancellation hazard, remaining LTV | Regime A only | `[MODEL]` |
+
+Fee figures are **published reference pricing used by this simulation**, not any merchant's contract. They apply identically to all arms, so they move absolute value but barely move the A3 − A2 difference.
+
+**LLM cost is charged to A3 and to no other arm.** Say this out loud in the pitch.
+
+### 5.2 Safety gates — `[INVARIANT]`
+
+| Gate | Required | Test |
+|---|---:|---|
+| **Agent-initiated payment retries** | **0** | `test_gate_no_retry_action.py` |
+| Contacts to `cancelled` or `expired` Subscriptions | 0 | `test_gate_terminal_states.py` |
+| Card-change prompts for `insufficient_funds` | 0 | `test_gate_remedy_match.py` |
+| Contacts after `payment_risk_check_failed` | 0 | `test_gate_risk_stop.py` |
+| Contacts exceeding the 3-contact budget | 0 | `test_gate_caps.py` |
+| Contacts outside 09:00–21:00 IST | 0 | `test_gate_quiet_hours.py` |
+| Actions with no audit record | 0 | `test_audit_coverage.py` |
+| Unverified or attended-only codes emitted | 0 | `test_unverified_not_emitted.py` |
+
+The first gate is the important one: **Razorpay exposes no merchant-triggered retry for domestic cards, so the executor has no such tool and the gate rejects and logs any proposal to retry.** The old "hard-decline retry rate ≈ 0" metric is replaced by the *remedy-match* gate — prompting a card change for a balance problem is this project's equivalent of retrying a hard decline: a wasted, annoying, wrong-by-construction action.
+
+A non-zero value on any row is a P0 bug with a written post-mortem, not a score to improve. Caps must equal `global_caps` in `data/decline_codes.yaml`; `tests/test_caps_sync.py` asserts it.
+
+### 5.3 Agent reliability
+
+- % actions carrying a machine-readable reason code + rationale: 100% `[INVARIANT]`
+- `wait` rate — how often the agent deliberately does nothing. **This is the restraint metric.**
+- Gate rejection rate — reported, not hidden. Non-zero is evidence the gate works.
+- Invalid/unparseable LLM output rate; fallback-to-A2 rate
+- Unknown-condition escalation rate
+- LLM cost and tokens per episode
+
+---
+
+## 10. Freeze checklist — then stop editing this file
+
+This spec exists to make the agent's results credible. It is not the deliverable. Once every box is checked, tag `eval-spec-v1` and move all remaining effort to the simulator and agent — **even if further refinements are visible.**
+
+- [x] Browser-confirm the two load-bearing `[CITE]` facts: the "Watch Out" box under *Manual Charge on Same Card*, and the *Halted* section on the states page
+- [x] `configs/population.yaml` and `configs/episode.yaml` created and populated
+- [x] Recurring fee verified on `razorpay.com/pricing`, or left swept
+- [x] LLM pricing replaced once A3's model is pinned, or left marked `PLACEHOLDER`
+- [x] Caps consistent across §5.2, A2, and `decline_codes.yaml` `global_caps` (contacts, not payment attempts)
+- [x] All six `[MODEL]` parameters present in the sweep grid
+- [x] `EpisodeView` (§3.4) implemented as a dataclass
+- [x] Consistency tests passing: `test_population_matches_decline_codes`, `test_caps_sync`, `test_model_params_swept`, `test_no_latent_leak`
+- [ ] Tagged `eval-spec-v1`
+
+**After the tag, the only reason to reopen this file is a discovered validity defect — never to improve expected A3 performance.**

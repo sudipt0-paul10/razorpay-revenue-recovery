@@ -123,7 +123,8 @@ agent_action_vocabulary:
   - wait                                  # explicit, logged. Restraint is an action.
   - stop_episode
 forbidden_actions:
-  - retry_payment                         # no merchant-triggered retry exists
+  items:
+    - retry_payment                       # no merchant-triggered retry exists
   enforced_by: tests/test_gate_no_retry_action.py
 
 source_routing:
