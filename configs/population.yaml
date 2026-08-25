@@ -1,0 +1,177 @@
+# configs/population.yaml
+#
+# SOURCE OF TRUTH for the v1 episode-opening condition mix.
+# Weights are copied verbatim from EVAL.md 3.2. This file is the machine-readable
+# original; EVAL.md 3.2's table is GENERATED from this file by `make docs`.
+# Do not edit weights here without a new EVAL tag + changelog entry.
+#
+# Provenance tags follow EVAL.md 0:
+#   [CITE] external fact | [INVARIANT] imposed constraint
+#   [DESIGN] experimental choice with no bearing on validity
+#   [MODEL] world assumption that could change the conclusion
+
+meta:
+  eval_spec_section: "EVAL.md 3.2"
+  taxonomy_source: data/decline_codes.yaml
+  taxonomy_version: 4
+  provenance: MODEL
+  v1_method: card
+  spec_version: eval-spec-v1-draft
+  provenance_type: invented_synthetic
+  note: >
+    Synthetic design parameters. NOT observed Razorpay statistics.
+
+validation:
+  # Enforced by tests/test_population_matches_decline_codes.py
+  weights_must_sum_to: 1.0
+  tolerance: 0.0001
+  every_code_must:
+    exist_in: data/decline_codes.yaml
+    have_verified: true
+    have_in_v1_cohort: true
+    not_appear_in: [unverified.codes, upi_codes_out_of_v1_scope.codes]
+    not_have_context: attended_only
+
+# ---------------------------------------------------------------------------
+# Invoice amount
+# ---------------------------------------------------------------------------
+
+invoice_amount_inr:
+  dist: lognormal
+  mu_expr: "ln(median_inr)"
+  median_inr: 2000
+  sigma: 1.0
+  support: [100, 50000]
+  rounding: nearest_rupee
+  provenance: invented_synthetic
+
+# ---------------------------------------------------------------------------
+# Failure mix
+#
+# Condition-level weights.
+# Bucket grouping and sensitivity perturbation are defined in
+# configs/model_params.yaml.
+# ---------------------------------------------------------------------------
+
+failure_mix:
+  conditions:
+    insufficient_funds: 0.32
+    card_declined_or_payment_failed: 0.24
+    card_expired: 0.16
+    debit_instrument_blocked: 0.12
+    card_not_enrolled: 0.06
+    subscription_cancelled: 0.05
+    bank_technical_error: 0.03
+    transaction_limit_exceeded: 0.01
+    payment_risk_check_failed: 0.01
+
+# ---------------------------------------------------------------------------
+# Episode-opening conditions.
+#
+# Two kinds of opening condition exist and they are NOT interchangeable:
+#   decline_code       - the auto-charge failed with this code; Subscription -> pending
+#   subscription_state - the Subscription was already in a terminal state at open
+# ---------------------------------------------------------------------------
+
+opening_conditions:
+
+  - key: insufficient_funds
+    kind: decline_code
+    code: insufficient_funds
+    weight: 0.32
+    correct_remedy: send_topup_reminder
+    urgency: before_halt
+
+  - key: ambiguous_decline
+    kind: decline_code_group
+    weight: 0.24
+    codes: [card_declined, payment_failed]
+    correct_remedy: send_payment_method_change_prompt
+    urgency: immediate
+    report_separately: true
+    UNRESOLVED_intra_group_split: true
+    note: >
+      EVAL.md 3.2 assigns 24% to "card_declined / payment_failed" as a single row
+      and does not specify how to divide it between the two codes. decline_codes.yaml
+      treats them as distinct codes with equivalent documented descriptions.
+      NOT split here, because inventing a split would be a silent assumption.
+      Resolve in EVAL before sim-v1.
+
+  - key: card_expired
+    kind: decline_code
+    code: card_expired
+    weight: 0.16
+    correct_remedy: send_payment_method_change_prompt
+    urgency: immediate
+
+  - key: debit_instrument_blocked
+    kind: decline_code
+    code: debit_instrument_blocked
+    weight: 0.12
+    correct_remedy: send_payment_method_change_prompt
+    urgency: immediate
+
+  - key: card_not_enabled_group
+    kind: decline_code_group
+    weight: 0.06
+    codes:
+      - card_not_enrolled
+      - card_disabled_for_online_payments
+      - debit_instrument_inactive
+    correct_remedy: send_payment_method_change_prompt
+    urgency: immediate
+    UNRESOLVED_intra_group_split: true
+    note: >
+      EVAL.md 3.2 lists "card_not_enrolled + aliases" as one 6% row. decline_codes.yaml
+      records three DISTINCT codes with equivalent documented descriptions and
+      explicitly states they must not be collapsed, so the simulator must emit all
+      three. The split across them is unspecified in EVAL. Not invented here.
+
+  - key: subscription_cancelled_by_customer
+    kind: subscription_state
+    state: cancelled
+    weight: 0.05
+    correct_remedy: no_contact
+    urgency: none
+    note: >
+      NOT a decline code. Maps to subscriptions.states.cancelled in decline_codes.yaml:
+      terminal, not restartable. Corresponds to Razorpay's documented failure reason
+      "the customer has cancelled the mandate from their end" [CITE].
+      Correct agent behaviour is zero contact; gated by test_gate_terminal_states.py.
+
+  - key: bank_technical_error
+    kind: decline_code
+    code: bank_technical_error
+    weight: 0.03
+    correct_remedy: wait
+    urgency: none
+
+  - key: transaction_limit_exceeded
+    kind: decline_code
+    code: transaction_limit_exceeded
+    weight: 0.01
+    correct_remedy: wait
+    urgency: none
+
+  - key: payment_risk_check_failed
+    kind: decline_code
+    code: payment_risk_check_failed
+    weight: 0.01
+    correct_remedy: escalate_to_merchant
+    urgency: immediate
+    hard_stop: true
+
+# Sum of failure_mix.conditions:
+# 0.32 + 0.24 + 0.16 + 0.12 + 0.06 + 0.05 + 0.03 + 0.01 + 0.01 = 1.00
+
+# ---------------------------------------------------------------------------
+# Excluded but present in taxonomy
+# ---------------------------------------------------------------------------
+
+excluded_but_in_taxonomy:
+  gateway_technical_error:
+    reason: >
+      Marked in_v1_cohort: true in decline_codes.yaml but carries NO weight in
+      EVAL.md 3.2. Left at zero rather than assigned an invented weight.
+      Either add it to EVAL 3.2 with a weight, or set in_v1_cohort: false.
+      Flagged, not silently resolved.

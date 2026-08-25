@@ -1,0 +1,299 @@
+# configs/model_params.yaml
+# Canonical registry of [MODEL] parameters for EVAL.md.
+#
+# This file is the SINGLE SOURCE OF TRUTH for:
+#   - how many [MODEL] parameters exist
+#   - what scalar handle each one is swept on
+#   - what the baseline and sensitivity cells are
+#
+# It does NOT hold the distributions themselves. Those live in
+# population.yaml / episode.yaml and are referenced by owner_path.
+# tests/test_model_params_registry.py enforces that every pointer resolves.
+#
+# EVAL.md sections are generated FROM this file by `make docs`.
+# Do not hand-edit the §8.2 table.
+
+spec_version: eval-spec-v1-draft
+eval_section: "8.2"
+
+sweep:
+  method: one_at_a_time          # locked decision 2
+  split: dev                     # locked decision 1 - HOLDOUT is never swept
+  default_magnitude: 0.30        # locked decisions 3, 6, 9, 10
+  directions: [low, high]
+  probability_clamp: [0.0, 1.0]  # locked decision 10
+  record_clamping: true          # locked decision 10
+  win_criterion:
+    # locked decision 4
+    metrics: [invoice_recovery_rate, subscription_rescue_rate]
+    require: all                 # BOTH metrics, not either
+    test: paired_bootstrap_95ci_excludes_zero
+    comparator: A2
+  majority_threshold: 0.80       # locked decision 5
+  rounding: ceil                 # ceil(0.80 * 22) = 18
+  frozen_policies: [A2, A3]      # locked decision 14 - no per-cell retuning
+  common_random_numbers:
+    enabled: true                # locked decision 14
+    # DEFECT 6 FIX: naive shared streams mean perturbing one parameter
+    # reshuffles every downstream draw, which destroys the OAT comparison.
+    # Each latent variable draws from its own named substream so that
+    # changing parameter X only changes X's realisations.
+    substream_isolation: per_variable
+    substreams:
+      - invoice_amount
+      - failure_condition
+      - balance_restore
+      - topup_acceleration
+      - channel_response
+      - card_change_completion
+      - cancellation_hazard
+      - remaining_lifetime
+
+  # DEFECT 1: p_topup_action is an invented [MODEL] number introduced by
+  # locked decision 12 but not given a sweep row. Leaving it unswept
+  # violates EVAL.md §0. Your locked cell count is 22, so this defaults
+  # to false and the parameter is declared un-swept and low-confidence.
+  # Flip to true for 24 cells / threshold 20. REQUIRES HUMAN DECISION.
+  include_topup_acceleration_cells: false
+
+# ---------------------------------------------------------------------------
+# The six parameters. Exactly six. IDs are canonical and match EVAL.md §8.2
+# verbatim; tests/test_model_params_registry.py asserts the set equality.
+# ---------------------------------------------------------------------------
+
+parameters:
+
+  invoice_amount:
+    eval_section: "3.1"
+    status: specified
+    provenance: invented_synthetic     # NOT observed Razorpay statistics
+    kind: distribution
+    owner_path: "population.yaml#/invoice_amount_inr"
+    regime: [B, A]
+    handle:
+      name: median_inr
+      transform: multiplicative
+      baseline: 2000                   # locked decision 6
+      held_fixed:
+        sigma: 1.0
+        support: [100, 50000]
+    sweep:
+      swept: true
+      magnitude: 0.30
+      cells:
+        low:  1400
+        high: 2600
+
+  failure_mix_weights:
+    eval_section: "3.2"
+    status: specified
+    provenance: invented_synthetic
+    kind: vector_simplex
+    owner_path: "population.yaml#/failure_mix"
+    regime: [B, A]
+    handle:
+      name: bucket_mass
+      transform: multiplicative
+      projection: renormalise_across_buckets   # locked decision 3
+      preserve_within_bucket_ratios: true      # locked decision 3
+      buckets:
+        card_change:
+          baseline: 0.34
+          members: [card_expired, debit_instrument_blocked, card_not_enrolled]
+          low_information: false
+        balance:
+          baseline: 0.32
+          members: [insufficient_funds]
+          low_information: false
+        ambiguous:
+          baseline: 0.24
+          members: [card_declined_or_payment_failed]
+          low_information: false
+        wait:
+          baseline: 0.04
+          members: [bank_technical_error, transaction_limit_exceeded]
+          low_information: true    # locked decision 13 - swept, kept in denominator
+        no_contact:
+          baseline: 0.05
+          members: [subscription_cancelled]
+          low_information: false
+        escalate:
+          baseline: 0.01
+          members: [payment_risk_check_failed]
+          low_information: true    # locked decision 13
+    sweep:
+      swept: true
+      magnitude: 0.30
+      cells_per_bucket: 2
+      invariants: [sums_to_one, non_negative, within_bucket_ratios_preserved]
+
+  balance_restore_timing:
+    eval_section: "3.3"
+    status: specified
+    provenance: invented_synthetic     # locked decision 11 - label explicitly
+    kind: mixture_distribution
+    owner_path: "episode.yaml#/latent/balance_restore_delay"
+    regime: [B, A]
+    definition:
+      # locked decision 11
+      components:
+        transient:
+          weight: 0.45
+          dist: truncated_exponential
+          mean_days: 2.0
+          support_days: [0, 30]
+        salary_cycle:
+          weight: 0.55
+          dist: days_until_next_salary_day
+          salary_day_pmf: {1: 0.55, 7: 0.20, 25: 0.10, 30: 0.15}
+          jitter:
+            dist: gamma
+            shape: 2
+            mean_days: 1.0
+      # locked decision 12 - invented synthetic causal mechanism.
+      # NOT a Razorpay fact. See DEFECT 1 above re: sweep coverage.
+      topup_acceleration:
+        p_topup_action: 0.35
+        accelerated_delay:
+          dist: exponential
+          mean_days: 0.5
+          rule: "min(original_delay, t_engage + draw)"
+        precondition: "engagement occurs strictly before next auto-retry"
+        provenance: invented_synthetic
+        swept: false                   # <-- DEFECT 1: see toggle above
+        confidence: low
+    handle:
+      name: salary_mode_mass
+      transform: multiplicative
+      baseline: 0.55
+      held_fixed: [transient_mean_days, salary_day_pmf, jitter]
+      projection: renormalise_two_component_mixture
+    sweep:
+      swept: true
+      magnitude: 0.30
+      cells:
+        low:  0.385
+        high: 0.715
+
+  channel_response_propensity:
+    eval_section: "3.3"
+    status: specified
+    provenance: invented_synthetic
+    kind: latent_field
+    owner_path: "episode.yaml#/latent/channel_response_propensity"
+    regime: [B, A]
+    definition:
+      customer_trait:
+        dist: beta
+        parameterisation: mean_concentration
+        mean: 0.28
+        concentration: 7
+      channel_multipliers:
+        whatsapp: 1.15
+        sms: 1.00
+        email: 0.65
+      fatigue:
+        form: "0.80 ** prior_contacts_in_episode"
+        base: 0.80
+      tenure_coupling:
+        form: "logit(theta_c) += beta * z(customer_tenure_days)"
+        beta: 0.35
+      # DEFECT 4 FIX: the tenure logit shift means the REALISED population
+      # mean is not exactly the Beta mean parameter. The handle addresses
+      # the Beta parameter; the realised mean is recorded per run.
+      handle_addresses: beta_mean_parameter
+      record_realised_mean: true
+      clamp: [0.0, 1.0]
+    handle:
+      name: trait_mean
+      transform: multiplicative
+      baseline: 0.28
+      held_fixed: [concentration, channel_multipliers, fatigue_base, tenure_beta]
+    sweep:
+      swept: true
+      magnitude: 0.30
+      cells:
+        low:  0.196
+        high: 0.364
+
+  card_change_completion_propensity:
+    eval_section: "3.3"
+    status: specified
+    provenance: invented_synthetic
+    kind: latent_field
+    owner_path: "episode.yaml#/latent/card_change_completion_propensity"
+    regime: [B, A]
+    definition:
+      dist: beta
+      parameterisation: mean_concentration
+      mean: 0.55
+      concentration: 6
+      conditional_on: engagement_with_card_change_prompt
+      # Deliberately uncorrelated with every EpisodeView signal, so that
+      # no fourth source of A3 advantage exists beyond the three
+      # pre-registered in EVAL.md §3.4.
+      independent_of_visible_signals: true
+      clamp: [0.0, 1.0]
+    handle:
+      name: completion_mean
+      transform: multiplicative
+      baseline: 0.55
+      held_fixed: [concentration]
+    sweep:
+      swept: true
+      magnitude: 0.30
+      cells:
+        low:  0.385
+        high: 0.715
+
+  cancellation_hazard_and_ltv:
+    eval_section: "3.3"
+    status: specified
+    provenance: invented_synthetic
+    kind: composite
+    owner_path: "episode.yaml#/latent/cancellation"
+    # locked decision 8: hazard is a WORLD MECHANIC and can change
+    # subscription_state, therefore it affects Regime-B rescue outcomes.
+    # LTV remains Regime-A-only pricing.
+    regime: [B, A]
+    regime_split:
+      hazard: world_mechanic          # affects Regime B
+      ltv: regime_a_pricing_only
+    definition:
+      hazard_per_contact:
+        form: "clamp(h0 * gamma ** (n - 1), 0, 1)"
+        h0: 0.010
+        gamma: 1.5
+        n: contact_index_within_episode
+        cumulative_over_3_contacts: 0.0460
+        # DEFECT 5 FIX: EVAL.md §1.2 says Razorpay's automatic failure
+        # email is part of the world, not a contact. It therefore carries
+        # NO hazard, and arm A0 has exactly zero cancellation hazard.
+        applies_to_razorpay_auto_email: false
+      remaining_lifetime_cycles:
+        # locked decision 7 - a COMPONENT, not a seventh parameter
+        dist: geometric
+        mean_cycles: 9
+        valued_at: billing_amount_inr
+        regime: [A]
+    handle:
+      name: joint_multiplier         # locked decision 9
+      transform: multiplicative
+      baseline: 1.0
+      applies_to: [hazard_h0, remaining_lifetime_mean_cycles]
+      # Scaling both together moves cancellation PROBABILITY and COST
+      # per cancellation in the same direction, so the Regime-A term
+      # moves ~quadratically while Regime-B rescue moves ~linearly.
+      # This is a pessimistic/optimistic axis, not a clean +-30% on one
+      # quantity. Stated here so it is not read as such.
+      axis_semantics: joint_pessimistic_optimistic
+    sweep:
+      swept: true
+      magnitude: 0.30
+      cells:
+        low:
+          hazard_h0: 0.007
+          remaining_lifetime_mean_cycles: 6.3
+        high:
+          hazard_h0: 0.013
+          remaining_lifetime_mean_cycles: 11.7

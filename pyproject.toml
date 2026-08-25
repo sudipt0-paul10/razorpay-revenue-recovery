@@ -9,6 +9,7 @@ description = "A simulated payment recovery agent with rigorous evaluation."
 requires-python = ">=3.13"
 
 [tool.pytest.ini_options]
+pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff]

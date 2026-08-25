@@ -1,0 +1,219 @@
+# configs/episode.yaml
+#
+# Episode definition for the v1 recovery-orchestration experiment.
+#
+# Provenance tags follow EVAL.md 0:
+#   [CITE] external fact | [INVARIANT] imposed constraint
+#   [DESIGN] experimental choice | [MODEL] world assumption that is
+#            explicitly declared as synthetic and swept where required.
+
+meta:
+  eval_spec_sections: ["EVAL.md 1", "EVAL.md 3.1", "EVAL.md 3.5", "EVAL.md 5.2"]
+  taxonomy_source: data/decline_codes.yaml
+  taxonomy_version: 4
+  framing: recovery_orchestration
+
+# ---------------------------------------------------------------------------
+# Episode boundaries
+# ---------------------------------------------------------------------------
+episode:
+  opens_when: subscription_enters_pending
+  opening_state: pending
+  window_days: 30
+  window_provenance: DESIGN
+  v1_method: card
+  v1_method_provenance: DESIGN
+  v1_method_rationale: >
+    eMandate and UPI subscription retry models are verified in decline_codes.yaml
+    but are out of v1 scope. Cards only.
+
+# ---------------------------------------------------------------------------
+# Razorpay's retry engine. NOT ours. [CITE]
+# decline_codes.yaml: subscriptions.retry_control
+# ---------------------------------------------------------------------------
+razorpay_retry_engine:
+  provenance: CITE
+  owner: razorpay
+  merchant_can_schedule_retries: false
+  merchant_can_trigger_retry: false
+  manual_charge_domestic_card_supported: false
+  card_schedule_days: [1, 2, 3]
+  state_after_exhaustion: halted
+  note: >
+    The agent has NO payment-attempt budget, because payment attempts are not an
+    agent action. Any proposal to retry is rejected by the gate and logged.
+    Enforced by tests/test_gate_no_retry_action.py.
+
+# ---------------------------------------------------------------------------
+# The decisive mechanic. decline_codes.yaml: subscriptions.card_change_effect
+# [CITE]
+# ---------------------------------------------------------------------------
+payment_method_change_effect:
+  provenance: CITE
+  while_pending:
+    last_invoice_auto_charged: true
+    outcomes: [invoice_recovered, subscription_rescued]
+  while_halted:
+    last_invoice_auto_charged: false
+    manual_charge_required: true
+    manual_charge_available_domestic_card: false
+    outcomes: [subscription_rescued]
+  halt_boundary_day: 3
+  note: "T+3 is a hard cutoff. After it, the invoice is stranded for domestic cards."
+
+# ---------------------------------------------------------------------------
+# Agent action budget. NOT payment attempts. [DESIGN]
+# Must equal decline_codes.yaml: defaults.global_caps
+# ---------------------------------------------------------------------------
+agent_budget:
+  max_contacts_per_episode: 3
+  provenance: DESIGN
+  quiet_hours_ist:
+    contact_window_start: "09:00"
+    contact_window_end: "21:00"
+    provenance: DESIGN
+    applies_to: contacts_only
+  razorpay_failure_email_counts_against_budget: false
+  razorpay_failure_email_note: >
+    Razorpay independently emails the customer a payment-failure notice containing
+    a payment-method-change link [CITE]. It is part of the world for every arm,
+    including A0. It is visible to the agent in contact_history but is not budgeted.
+
+# ---------------------------------------------------------------------------
+# Invoice amount — EVAL.md 3.1
+#
+# Sweep membership is declared centrally in configs/model_params.yaml.
+# ---------------------------------------------------------------------------
+invoice_amount_inr:
+  provenance: MODEL
+  distribution: lognormal
+  mu_expression: "ln(2000)"
+  sigma: 1.0
+  sampling: rejection
+  lower_bound: 100
+  upper_bound: 50000
+  rounding: rupee
+  note: >
+    Synthetic design parameters. NOT observed Razorpay merchant statistics.
+    Median 2000, mean ~3297. Rejection rate ~0.2%.
+
+# ---------------------------------------------------------------------------
+# Regime A only — cancellation hazard + LTV
+#
+# remaining_subscription_lifetime_cycles is a COMPONENT of the
+# cancellation_hazard_and_ltv MODEL parameter, not a standalone swept
+# parameter.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Latent parameters
+#
+# ALL FOUR LATENT PARAMETERS ARE INVENTED SYNTHETIC ASSUMPTIONS.
+# They are NOT observed Razorpay statistics, NOT derived from merchant data,
+# and NOT sourced from any public document.
+#
+# These values are hidden from the agent and are used only by the simulator.
+# ---------------------------------------------------------------------------
+latent:
+  provenance: invented_synthetic
+  visible_to_agent: false
+
+  balance_restore_delay:
+    provenance: invented_synthetic
+
+    mixture:
+      transient:
+        weight: 0.45
+        dist: truncated_exponential
+        mean_days: 2.0
+        support_days: [0, 30]
+
+      salary_cycle:
+        weight: 0.55
+        dist: days_until_next_salary_day
+        salary_day_pmf:
+          1: 0.55
+          7: 0.20
+          25: 0.10
+          30: 0.15
+        jitter:
+          dist: gamma
+          shape: 2
+          mean_days: 1.0
+
+    topup_acceleration:
+      provenance: invented_synthetic
+      p_topup_action: 0.35
+      accelerated_delay:
+        dist: exponential
+        mean_days: 0.5
+      rule: "min(original_delay, t_engage + draw)"
+      precondition: "engagement strictly before next auto-retry"
+      swept: false
+      confidence: low
+
+  channel_response_propensity:
+    provenance: invented_synthetic
+
+    customer_trait:
+      dist: beta
+      parameterisation: mean_concentration
+      mean: 0.28
+      concentration: 7
+
+    channel_multipliers:
+      whatsapp: 1.15
+      sms: 1.00
+      email: 0.65
+
+    fatigue:
+      base: 0.80
+      exponent: prior_contacts_in_episode
+
+    tenure_coupling:
+      beta: 0.35
+      form: "logit(theta) += beta * z(tenure_days)"
+
+    handle_addresses: beta_mean_parameter
+    record_realised_mean: true
+    clamp: [0.0, 1.0]
+
+  card_change_completion_propensity:
+    provenance: invented_synthetic
+    dist: beta
+    parameterisation: mean_concentration
+    mean: 0.55
+    concentration: 6
+    conditional_on: engagement_with_card_change_prompt
+    independent_of_visible_signals: true
+    clamp: [0.0, 1.0]
+
+  cancellation:
+    provenance: invented_synthetic
+
+    hazard_per_contact:
+      h0: 0.010
+      gamma: 1.5
+      form: "clamp(h0 * gamma ** (n-1), 0, 1)"
+      regime: world_mechanic
+      applies_to_razorpay_auto_email: false
+
+    remaining_subscription_lifetime_cycles:
+      dist: geometric
+      mean_cycles: 9
+      regime: [A]
+      component_of: cancellation_hazard_and_ltv
+      note: >
+        This is a component of the cancellation_hazard_and_ltv MODEL parameter,
+        NOT a seventh standalone swept parameter.
+
+# ---------------------------------------------------------------------------
+# Deliberately NOT in this file
+# ---------------------------------------------------------------------------
+out_of_scope_here:
+  payment_attempt_caps: "Not an agent action. See razorpay_retry_engine."
+  issuer_downtime_model: "EVAL.md 3.2 excludes it from v1 — the agent cannot act on it."
+  seeds_and_splits: >
+    Specified in EVAL.md 3.5 and 6 (master seed, dev/holdout/stress, bootstrap).
+    Not duplicated here to avoid two sources of truth. They still need a home —
+    configs/eval.yaml — before the harness can run.
