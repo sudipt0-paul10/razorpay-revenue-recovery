@@ -1,5 +1,110 @@
 # Changelog
 
+## Day 2 Stage 5 — falsification tests, closed — 2026-08-26
+
+Five falsification tests (`tests/test_stage5_falsification.py`, SIM.md §8).
+No simulator, A0, A1-ish, A2, A4, or config change was made at any point in
+this stage to obtain a result - every number below is as-observed.
+
+### Results
+
+|  | invoice recovery | subscription rescue |
+|---|---:|---:|
+| A0 | 0.3525 | 0.4055 |
+| A1-ish | 0.4840 | 0.5095 |
+| A2 | 0.4485 | 0.5180 |
+| A4 (equal 3-contact budget) | 0.5465 | 0.5670 |
+
+A4 − A2: invoice recovery +0.0980 (CI [+0.0855, +0.1115]); subscription
+rescue +0.0490 (CI [+0.0390, +0.0595]).
+
+### Test-design defect (corrected, not a simulator finding)
+
+The original A4 arm used exactly one contact while A1-ish/A2 could use up
+to three - not an equal-budget comparison, so the original A4-vs-A2 result
+(A4 invoice recovery 0.4545) **is not, and must not be described as, a
+simulator falsification or a falsification of the A4 oracle.** It was an
+arm-definition defect. Corrected by giving A4 the identical 3-contact
+budget (`episode.yaml#/agent_budget/max_contacts_per_episode`), applying
+its existing latent-informed decision logic (unchanged: which content, for
+which condition, chosen from full T=0 latent access, never from future RNG
+outcomes) across up to three attempts instead of one. Under the corrected
+budget A4 clearly beats A2 on both metrics (table above) - an
+arm-definition correction restoring the intended comparison, not tuning
+toward a desired result.
+
+### Genuine falsification finding: the ordering hypothesis is rejected
+
+`SIM.md §8` test 1's hypothesis (A4 > A2 > A1-ish > A0) is **rejected**,
+specifically and only because **A1-ish beats A2 on invoice recovery**
+(0.4840 vs 0.4485; paired-bootstrap diff -0.0355, CI [-0.0465, -0.0250],
+clearly excludes zero). Mechanism verified, not merely asserted: A2's own
+frozen schedule places its second contact for the card-broken bucket and
+`ambiguous_decline` at T+5/T+7 - always after the T+3 invoice-retry
+boundary, so those contacts can only ever affect post-halt rescue, never
+invoice recovery. A1-ish's naive fixed T+3 contact lands exactly on the
+last retry day, and under the within-day-ordering ruling, that same-day
+engagement is visible to that day's own retry check - a real chance A2's
+schedule structurally forfeits on the card-broken + `ambiguous_decline`
+buckets (58% of the population). No simulator or policy change was made to
+alter this finding; it stands as reported. **This is not a claim that "the
+simulator failed"** - every other mechanism it depends on (the retry gate,
+CRN, the halt boundary, the responsiveness signal) passed its own
+falsification test this stage. It is a specific, actionable finding about
+A2's frozen schedule.
+
+### Test 2 (wrong-remedy null) — PASSED, with a flagged stale figure
+
+Recovery comparable to A0 (WRONG_REMEDY 0.3595 vs A0 0.3525). Actual
+contact ratio: **1.8378× A2**, not 3×. `SIM.md §8`'s "3x" figure predates
+A2's exact schedule being fixed and is flagged as stale/unsupported by the
+current A2 schedule - not tuned toward, recorded as observed.
+
+### Tests 3–5 — PASSED
+
+- **Test 3 (timing null):** post-halt topup effect exactly zero (636/636
+  `insufficient_funds` episodes byte-identical to A0).
+- **Test 4 (CRN identity):** 0 mismatches across all arms, including the
+  corrected A4, over 300 episode indices.
+- **Test 5 (responsiveness-signal null, Stage 4B narrowed formulation):**
+  adaptive-vs-control effect +0.0383 at baseline concentration (pre-declared
+  threshold: must exceed +0.02 - met), +0.0173 at high concentration
+  (pre-declared tolerance: within ±0.02 - met). θ_c variance collapsed
+  >1000×.
+
+### Empirical A4 reference - not a target
+
+The A4 headroom over A2 (+9.8 points invoice recovery, +4.9 points
+subscription rescue) is an **empirical oracle/reference gap under this
+simulator's defined information and 3-contact budget** - not a
+mathematical theoretical maximum, and not a guaranteed target for a future
+A3.
+
+A4 provides an empirical oracle/reference of 0.5670 subscription rescue
+and 0.5465 invoice recovery under the frozen simulator's equal 3-contact
+budget; A4 − A2 headroom is +0.0490 rescue and +0.0980 invoice recovery;
+`EVAL.md §3.3`'s cited "15% relative target" (the `§7` it names is
+referenced but not written as a section anywhere in `EVAL.md` - the figure
+itself is real text at `§3.3`, not a fabricated number) would require A3
+to reach approximately 0.5957 rescue from the A2 baseline of 0.5180
+(0.5180 × 1.15); this exceeds the observed A4 empirical oracle/reference
+of 0.5670, so the pre-registered target appears unreachable under the
+frozen simulator, equal 3-contact budget, and A4's information set - this
+is an empirical finding about the target's reachability, **not** a change
+to the target or to `EVAL.md`.
+
+### Test reporting (kept separate, per this closure's instruction)
+
+- **Ordinary regression suite** (everything except the intentional Stage 5
+  falsification assertions): all PASS.
+- **Stage 5 falsification suite:** 4 of 5 hypotheses PASS (timing null, CRN
+  identity, responsiveness-signal null, wrong-remedy null); **1 of 5 FAILS/
+  REJECTED** (the policy-ordering hypothesis, for the A1-vs-A2 reason
+  above - not weakened or altered to obtain a pass).
+
+`python -m ruff check .`: all checks passed. Not committed. `EVAL.md` and
+`SIM.md` untouched throughout Stage 5.
+
 ## eval-spec-v1.2 — 2026-08-26
 
 Closes the specification/test inconsistency the Day 2 Stage 4B review
