@@ -224,6 +224,32 @@ name — and their v1 status:
    coupling formula (`logit(θ_c) += 0.35 × z(customer_tenure_days)`) is not
    implemented in `rrx.sim.latent`.
 
+### 3.5 Splits
+
+| Split | N | Seeds | Use |
+|---|---:|---|---|
+| `dev` | 2,000 | 1,000–2,999 | All development and tuning |
+| `holdout` | 2,000 | 9,000–10,999 | **Once** per candidate release |
+| `stress` | 300 | 5,000–5,299 | Adversarial |
+
+All `[DESIGN]`. Every holdout run — including unsuccessful ones — is logged in `results/holdout_runs.md`.
+
+**Stress** `[DESIGN]`: all-`cancelled` cohort (correct behaviour is near-zero contact); all-`halted`-at-open; high-value only (≥₹10,000, a conditional draw from §3.1); unreachable customer.
+
+[RECOVERY, eval-spec-v1.4] This section was deleted, without a
+`CHANGELOG.md` entry, in commit `337e0060e9f5af013e4b8362623a06d47a5ee67a`
+("Complete Day 1 evaluation infrastructure", 2026-08-25) — before
+`CHANGELOG.md` existed. Restored here verbatim from that commit's parent
+(`git show 337e006~1:EVAL.md`, commit `d04d158b1a6d8919d0777f73cd58ed26f316d28a`),
+the same source and method already used to restore §4/§6/§7 in
+`eval-spec-v1.3`. Note: the `eval-spec-v1` **git tag** (`0617f78`) was cut
+*after* the deletion commit and does not itself contain this text — see
+`CHANGELOG.md`'s `eval-spec-v1.4` entry for the full provenance chain.
+Cross-checked against `rrx.sim.run_stage3.EPISODE_INDICES` (`range(1000,
+3000)`) and `tests/test_stage5_falsification.py`'s `INDICES` — both agree
+with the `dev` row above. `holdout`/`stress` are not yet exercised by any
+code in this repository.
+
 ---
 
 ## 4. Arms
@@ -376,6 +402,63 @@ The `dev` figures above (12.9% / 5.3%, and the illustrative absolute values belo
 ---
 
 **Note on this restoration's scope [eval-spec-v1.3]:** commit `337e006` also deleted §3.5 (Splits), §8 (Threats to validity), and §9 (Definitions) without documentation. Only §4, §6, and §7 are restored in this pass, per the Day 3 baseline-resolution review's explicit scope — §3.5/§8/§9 remain missing. Flagged here as a known, open gap, not silently reintroduced and not silently left unmentioned. See `CHANGELOG.md`'s `eval-spec-v1.3` entry.
+
+**Update, eval-spec-v1.4:** §3.5, §8, and §9 are restored below, from the
+same pre-deletion source (`337e006~1` = `d04d158`), per the A3
+reconciliation review. The "remain missing" status stated in the
+paragraph above is superseded by this restoration; the paragraph itself
+is preserved unrewritten per this file's own §0 rule. See
+`CHANGELOG.md`'s `eval-spec-v1.4` entry.
+
+---
+
+## 8. Threats to validity
+
+1. **We wrote the world the agent competes in.** Simulator frozen
+   (`sim-v1`) before any agent policy exists; latent state architecturally
+   unreachable; uplift attributable to pre-registered structures only.
+2. **Parameter sensitivity.** Six `[MODEL]` parameters — invoice amount,
+   failure mix weights, balance-restore timing, channel response
+   propensity, card-change completion propensity, cancellation hazard +
+   LTV — swept at ±30% `[DESIGN]`. A3 must beat A2 in the large majority
+   of cells. Losing cells published in `results/sensitivity.md`, not
+   dropped.
+3. **Regime A is invented.** Cancellation hazard and LTV have no source.
+   Every headline number is Regime B.
+4. **LLM nondeterminism.** Temperature 0 where supported; 3 repeat runs
+   on a 300-episode subsample; model version pinned in every manifest.
+5. **Verification limits.** Decline classifications verified against
+   three of four cited Razorpay error pages on 25 Aug 2026; the List of
+   Errors page is JS-rendered and unreadable. eMandate and UPI
+   subscription retry models are unverified and out of scope (§1.4).
+   Fifteen decline codes remain unverified and cannot be emitted.
+6. **Simulator realism.** Response and card-change propensities are the
+   weakest link. State plainly in README and pitch: *these are uplift
+   results against a stated behavioural model on synthetic data, not
+   observed merchant recovery.*
+
+[RECOVERY, eval-spec-v1.4] Restored verbatim from `d04d158` (see §3.5's
+identical footnote above for full provenance). **Not modified** to
+reflect A3 — the original six items are reproduced exactly as written
+before any agent code existed. Items 7 and 8 below, and the amendment
+note on item 4, are new v1.4 additions, not part of this recovery.
+
+---
+
+## 9. Definitions
+
+- **Episode** — a Subscription entering `pending` after a failed
+  auto-charge, tracked 30 days.
+- **Invoice recovery** — the specific failed invoice paid within the
+  window.
+- **Subscription rescue** — the Subscription returned to `active` within
+  the window. Not the same thing (§1.3).
+- **Contact** — an outbound message from the agent. Razorpay's automatic
+  failure email is not a contact and is not budgeted.
+- **`wait`** — an explicit logged decision not to act. Restraint is an
+  action, not an absence.
+
+[RECOVERY, eval-spec-v1.4] Restored verbatim from `d04d158`, unmodified.
 
 ---
 
