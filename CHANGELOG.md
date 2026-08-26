@@ -1,5 +1,48 @@
 # Changelog
 
+## sim-v1 — simulator freeze — 2026-08-26
+
+Freeze-only stage. No simulator, config, or test change. Freezes the
+`SIM.md` §0/§1 simulator surface — `src/rrx/sim/`, `configs/episode.yaml`,
+`configs/population.yaml`, `configs/model_params.yaml`,
+`configs/costs.yaml`, `SIM.md` — at the Day 2 Stage 5 commit
+`cdd118ad9ef0f8cb145a1aab846fe2e3a2d4ba3a`, under `eval-spec-v1.2`.
+
+### Verification at freeze time
+
+- Frozen surface (`src/rrx/sim/`, `configs/`, `EVAL.md`, `SIM.md`)
+  verified diff-empty against `cdd118ad9ef0f8cb145a1aab846fe2e3a2d4ba3a`.
+- Ordinary regression suite: 537 passed, 0 failed.
+- Stage 5 falsification suite (`tests/test_stage5_falsification.py`,
+  run standalone): 4 of 5 passed; Test 1 (policy ordering) rejected,
+  reproducing the Stage 5 record above (`A1=0.4840, A2=0.4485,
+  diff=-0.0355, CI=[-0.0465,-0.0250]`) byte-for-byte — no drift, the
+  Stage 5 finding is not re-evaluated or reinterpreted here.
+- Test 1's A1/A2 figures are computed on the `dev` split, episode indices
+  `range(1000, 3000)` (2000 episodes), `MASTER_SEED=20260825`
+  (`tests/test_stage5_falsification.py:42-44,303-307,334`); no holdout
+  split is used.
+- `python -m ruff check .`: all checks passed.
+
+### Integrity mechanism
+
+`sim-v1` is an annotated git tag pointing at this commit, following the
+same convention already used for `eval-spec-v1` / `v1.1` / `v1.2`: the
+tag annotation plus this changelog entry constitute the freeze record.
+No config-hash or manifest-file mechanism exists anywhere in this
+repository, and none is introduced by this entry.
+
+### Deferred work, explicitly preserved
+
+A per-run manifest and config-hash mechanism — referenced only in
+passing at `EVAL.md` §3.3 ("the realised mean is recorded in each run
+manifest") with no schema specified there — remains unbuilt. It was
+flagged as deferred at Stage 2 (`sim-v1 (deferred; manifest work is
+Stage 4)`, this file's Stage 2 entry) and was not delivered in Stages
+3, 4, 4B, or 5. `sim-v1` freezes the simulator's code/config surface
+only via the git commit/tag; it does not supply per-run provenance
+capture. That machinery must exist before the first evaluation run.
+
 ## Day 2 Stage 5 — falsification tests, closed — 2026-08-26
 
 Five falsification tests (`tests/test_stage5_falsification.py`, SIM.md §8).
