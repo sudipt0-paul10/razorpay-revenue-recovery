@@ -1,5 +1,70 @@
 # Changelog
 
+## Day 2 Stage 2 — 2026-08-26
+
+Sweep-cell materialization and a reproducibility control. No agent, clock,
+cohort generator, or manifest — those remain out of scope per this stage's
+brief.
+
+### Cell -> resolved-config resolver
+
+- `src/rrx/spec/resolver.py`: new pure `resolve_config(episode_cfg,
+  population_cfg, cell)`, dispatched by each cell's declared `handle` (not
+  by pattern-matching `cell_id`). Returns fresh deep copies; never mutates
+  its inputs. Resolves all 26 `enumerate_cells()` cells except
+  `invoice_amount`, which raises `NotImplementedError` naming the
+  unresolved invoice-authority question (`population.yaml#/invoice_amount_inr`
+  vs `episode.yaml#/invoice_amount_inr#mu_expression` - two independent
+  representations, no consumer for either today, so no basis to pick one).
+- `failure_mix_weights` bucket-mass cells update only
+  `population.yaml#/failure_mix/conditions` - the representation
+  `model_params.yaml`'s `owner_path` names and the one
+  `rrx.spec.registry.expand_to_conditions` actually consumes.
+  `population.yaml#/opening_conditions[*]/weight` is a separate
+  representation (consumed only by
+  `tests/test_population_matches_decline_codes.py` and, apparently,
+  `EVAL.md §3.2`'s hand-maintained table - the `make docs` generator that
+  comment references does not exist in this repository) with no test or
+  code proving the two agree. Left deliberately unsynchronized rather than
+  silently patched to match, per the discovered-duplication rule for this
+  stage - see `tests/test_sweep_materialization.py`'s module docstring and
+  `test_failure_mix_bucket_cell_changes_only_failure_mix_conditions`.
+
+### Sweep reachability
+
+`tests/test_sweep_materialization.py` classifies all 26 cells:
+**10/26 simulator-reachable** (`balance_restore_timing` x2 handles x2,
+`channel_response_propensity`, `card_change_completion_propensity`,
+`failure_mix_weights.ambiguous_cause_split` - each has a live consumer in
+`rrx.sim.latent`) and **16/26 materializer-only** (`invoice_amount`, the six
+`failure_mix_weights` bucket-mass cells, `cancellation_hazard_and_ltv` - no
+opening-condition selector, invoice sampler, or cancellation/LTV sampler
+exists yet). Reachable cells get a smoke test proving the resolved config
+moves the relevant sampled statistic in the declared direction relative to
+baseline; materializer-only cells are resolved but no consumer is invented
+to inflate the count.
+
+### Reproducibility control
+
+Not performance-motivated. `pyproject.toml`: `numpy>=2.0` -> `numpy==2.5.2`
+(the installed version) - an unpinned lower bound lets a future numpy/RNG
+implementation change silently shift every sampled value while the frozen
+CRN seeding (`seed_for_substream`) and calling code stay identical.
+`tests/test_latent_snapshot.py` pins six known `(split, episode_index,
+opening_condition)` -> `LatentState` cases (one per SIM.md §2 mechanism
+family, across both `dev` and `holdout`) recorded against numpy 2.5.2, so a
+future deliberate dependency bump that changes sampled outputs fails loudly
+here instead of silently.
+
+### Verification
+
+- `python -m pytest -q`: see run output in the Stage 2 report.
+- `python -m ruff check .`: see run output in the Stage 2 report.
+- No frozen spec file (`EVAL.md`, `SIM.md`, `configs/episode.yaml`,
+  `configs/population.yaml`, `configs/model_params.yaml`) modified.
+- Does not move or delete `eval-spec-v1` or `eval-spec-v1.1`. Does not tag
+  `sim-v1` (deferred; manifest work is Stage 4).
+
 ## eval-spec-v1.1 — 2026-08-26
 
 Not performance-motivated. No agent (A2, A3, or otherwise) exists yet in this
