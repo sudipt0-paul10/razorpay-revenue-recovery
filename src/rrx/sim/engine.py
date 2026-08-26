@@ -49,7 +49,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from rrx.sim.cohort import sample_cohort_episode
+from rrx.features.episode_view import ContactRecord, EpisodeView
+from rrx.sim.cohort import CohortEpisode, sample_cohort_episode
 from rrx.sim.latent import MASTER_SEED, LatentState, draw_latent_state
 from rrx.sim.rng import rng_for_child_stream
 
@@ -103,6 +104,13 @@ class _EpisodeState:
         # topup_acceleration child index - dues-naming engagements only.
         self.topup_engagement_index = 0
         self.card_change_sent_for_insufficient_funds = False
+
+        # RULING 6 (Stage 4B): observational log only - never read by
+        # _retry_succeeds, the card/dues effect resolvers, or either
+        # policy. Holds plain rrx.features.episode_view.ContactRecord
+        # values only (never latent state, RNG state, or a reference to
+        # this _EpisodeState itself).
+        self.contact_history: list[ContactRecord] = []
 
 
 def _retry_succeeds(state: _EpisodeState, day: int) -> bool:
@@ -225,6 +233,20 @@ def _send_message(
     if is_agent_contact and not changed:
         state.wasted_attempts += 1
 
+    # RULING 6 (Stage 4B): observational logging only, using values already
+    # computed above - does not feed back into any mechanic. `remedy` names
+    # the message's content per SIM.md §3's own action table ("card, not
+    # dues" / "dues, not card" / "both" for the automatic email).
+    if names_card and names_dues:
+        remedy = "both"
+    elif names_card:
+        remedy = "card_change"
+    else:
+        remedy = "topup_reminder"
+    state.contact_history.append(
+        ContactRecord(day=day, channel=channel, remedy=remedy, delivered=True, engaged=engaged)
+    )
+
     # RULING 2 (narrower, model-clarified): immediate post-halt rescue, but
     # ONLY for episodes that opened with card_chargeable=False. An episode
     # already card_chargeable=True at opening (insufficient_funds,
@@ -311,6 +333,56 @@ _POLICIES: dict[str, Callable[[str, int, str], str | None]] = {
 }
 
 
+def build_episode_view(
+    cohort: CohortEpisode,
+    state: _EpisodeState,
+    day: int,
+    episode_cfg: dict[str, Any],
+    split: str,
+    i: int,
+) -> EpisodeView:
+    """RULING 7: the actual agent-facing projection, produced from real
+    simulator state. A POSITIVE construction - every field below is copied
+    out of `cohort`/`state` as a plain value (str/int/tuple-of-
+    ContactRecord); no field is, or references, `state`, `cohort`,
+    `LatentState`, an RNG, or any other simulator object. See episode_view.
+    py's module docstring for exactly which EVAL.md §3.4 fields this v1
+    surface omits and why (RULING 3, 4, 5, 8).
+
+    `decline_code` (RULING 2): the observable, group-level
+    `opening_condition_key` itself - "ambiguous_decline" for that bucket,
+    never the resolved latent Bernoulli cause, matching population.yaml's
+    own note that "A3 and A2 both see only decline_code for this bucket."
+
+    `billing_amount_inr` (RULING 8): aliased to `invoice_amount_inr` - no
+    separate recurring-price figure exists anywhere in this repository.
+
+    `days_since_first_failure`/`auto_retries_remaining`/
+    `next_auto_retry_day` (RULING 1): all relative-day integers, derived
+    from `day` and the frozen retry schedule; no calendar anchor exists or
+    is invented.
+    """
+    retry_days = episode_cfg["razorpay_retry_engine"]["card_schedule_days"]
+    halt_boundary_day = episode_cfg["payment_method_change_effect"]["halt_boundary_day"]
+    max_contacts = episode_cfg["agent_budget"]["max_contacts_per_episode"]
+
+    retries_exhausted = state.invoice_recovered or day >= halt_boundary_day
+    upcoming = [] if retries_exhausted else sorted(rd for rd in retry_days if rd > day)
+
+    return EpisodeView(
+        subscription_id=f"{split}-{i}",
+        subscription_state=state.subscription_state,
+        invoice_amount_inr=cohort.invoice_amount_inr,
+        days_since_first_failure=day,
+        auto_retries_remaining=len(upcoming),
+        next_auto_retry_day=upcoming[0] if upcoming else None,
+        decline_code=cohort.opening_condition_key,
+        billing_amount_inr=cohort.invoice_amount_inr,
+        contact_history=tuple(state.contact_history),
+        budget_remaining=max_contacts - state.contacts_sent,
+    )
+
+
 def _finalize(cohort, state: _EpisodeState) -> EpisodeResult:
     return EpisodeResult(
         opening_condition_key=cohort.opening_condition_key,
@@ -330,13 +402,25 @@ def run_episode(
     episode_cfg: dict[str, Any],
     population_cfg: dict[str, Any],
     master_seed: int = MASTER_SEED,
-) -> EpisodeResult:
+    capture_view_at_day: int | None = None,
+) -> EpisodeResult | tuple[EpisodeResult, EpisodeView | None]:
     """Simulate one episode under `arm` ("A0" or "A2").
 
     The cohort draw and the latent-state draw never take `arm` as an input -
     both are computed identically regardless of which policy runs, which is
     what makes A0 and A2 paired-CRN comparable: episode i's world is
     byte-identical across arms, only the policy differs.
+
+    RULING 7 (Stage 4B): `capture_view_at_day`, when given, additionally
+    returns the real `EpisodeView` (via `build_episode_view`) as of the end
+    of that day's mechanics - `(EpisodeResult, EpisodeView | None)` instead
+    of a bare `EpisodeResult`. Purely opt-in and additive: every existing
+    caller that omits it gets the exact same `EpisodeResult` as before, byte
+    for byte - nothing about outcome resolution, engagement, or policy
+    behavior changes based on this parameter. Returns `(result, None)` if
+    the requested day is never reached (currently: the terminal-at-open
+    `subscription_cancelled_by_customer` path, which returns before the day
+    loop exists at all).
     """
     if arm not in _POLICIES:
         raise KeyError(f"unknown arm: {arm!r}")
@@ -355,7 +439,8 @@ def run_episode(
         # subscription_cancelled_by_customer: terminal at open, no charge was
         # ever attempted - no payment-failure event, so no automatic email,
         # no retries, and (EVAL.md §5.2) no agent contact either.
-        return _finalize(cohort, state)
+        result = _finalize(cohort, state)
+        return (result, None) if capture_view_at_day is not None else result
 
     retry_days = episode_cfg["razorpay_retry_engine"]["card_schedule_days"]
     halt_boundary_day = episode_cfg["payment_method_change_effect"]["halt_boundary_day"]
@@ -366,6 +451,8 @@ def run_episode(
     send_kwargs = dict(
         split=split, i=i, latent=latent, episode_cfg=episode_cfg, master_seed=master_seed
     )
+
+    captured_view: EpisodeView | None = None
 
     for day in range(0, window_days + 1):
         if day == 0:
@@ -402,4 +489,8 @@ def run_episode(
                 is_agent_contact=False, **send_kwargs,
             )
 
-    return _finalize(cohort, state)
+        if capture_view_at_day is not None and day == capture_view_at_day:
+            captured_view = build_episode_view(cohort, state, day, episode_cfg, split, i)
+
+    result = _finalize(cohort, state)
+    return (result, captured_view) if capture_view_at_day is not None else result

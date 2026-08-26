@@ -18,6 +18,17 @@ Three independent enforcement layers, all deterministic and offline:
 
 Layer 3 fails if EpisodeView does not exist. That is intentional:
 EVAL.md §10 requires it as a dataclass before eval-spec-v1.
+
+eval-spec-v1.2 (2026-08-26): EVAL.md §3.4 itself now records (via a
+[DEFECT, eval-spec-v1.2] footnote directly below its 16-field list) that
+the v1 EpisodeView surface is the narrower 10-field EPISODE_VIEW_ALLOWED
+below, not the frozen list's literal text - the frozen 16-field list is
+preserved unrewritten as the target for a future version, per §10's rule
+against rewriting frozen text. This allowlist enforces that footnoted v1
+surface, so its "subset of the §3.4 allowlist" description in layer 3
+above is accurate against the CURRENT (amended) EVAL.md §3.4, not a
+stale/narrower stand-in for it - the enforcing test and the specification
+it enforces genuinely agree.
 """
 
 from __future__ import annotations
@@ -37,29 +48,53 @@ GUARDED_PACKAGES = ("rrx/agent", "rrx/features")
 # Reaching any of these gives access to latent state.
 FORBIDDEN_MODULES = ("rrx.sim.latent", "rrx.sim")
 
-# EVAL.md §3.4 - the complete EpisodeView surface. Nothing else is visible.
+# EVAL.md §3.4's v1 surface, per its own [DEFECT, eval-spec-v1.2] footnote -
+# 10 fields, not the frozen 16-field list's literal text (that list is
+# preserved unrewritten as a future-version target, per EVAL.md §10). Six
+# fields (decline_source, billing_cycle_day, completed_billing_cycles,
+# customer_tenure_days, prior_pending_episodes, prior_recovery_channel) are
+# deliberately removed rather than populated with fabricated values - see
+# the footnote itself, src/rrx/features/episode_view.py's module docstring,
+# SIM.md §10, and CHANGELOG.md for the full recorded reasoning.
 EPISODE_VIEW_ALLOWED = {
     "subscription_id", "subscription_state", "invoice_amount_inr",
-    "days_since_first_failure", "auto_retries_remaining", "next_auto_retry_date",
-    "decline_code", "decline_source",
-    "billing_cycle_day", "billing_amount_inr", "completed_billing_cycles",
-    "customer_tenure_days", "prior_pending_episodes", "prior_recovery_channel",
+    "days_since_first_failure", "auto_retries_remaining", "next_auto_retry_day",
+    "decline_code", "billing_amount_inr",
     "contact_history", "budget_remaining",
 }
 
-# EVAL.md §3.4 - contact_history[] : (ts, channel, remedy, delivered, engaged).
-# A separate surface: EPISODE_VIEW_ALLOWED admits the contact_history field
-# itself, which says nothing about what each entry carries.
-CONTACT_RECORD_ALLOWED = {"ts", "channel", "remedy", "delivered", "engaged"}
+# Day 2 Stage 4B: contact_history[] : (day, channel, remedy, delivered,
+# engaged) - `ts` renamed to `day` (RULING 1: relative time, no calendar
+# anchor). A separate surface: EPISODE_VIEW_ALLOWED admits the
+# contact_history field itself, which says nothing about what each entry
+# carries.
+CONTACT_RECORD_ALLOWED = {"day", "channel", "remedy", "delivered", "engaged"}
 
-# EVAL.md §3.3 - latent fields the agent must never see.
+# EVAL.md §3.3 / SIM.md §1 - latent fields the agent must never see.
+# Includes rrx.sim.latent.LatentState's own dataclass field names directly
+# (card_chargeable, funds_available_from, mandate_alive, blocked_until,
+# channel_response_trait) - added Day 2 Stage 4 after finding these five,
+# the most direct latent field names in the codebase, were missing from
+# this set entirely; only card_change_completion_propensity (also a
+# LatentState field) had been listed.
 LATENT_FIELD_NAMES = {
     "balance_restore_delay", "salary_day", "p_topup_action",
     "topup_acceleration", "channel_response_propensity",
     "card_change_completion_propensity", "cancellation_hazard",
     "cancellation_hazard_per_contact", "remaining_subscription_lifetime_cycles",
     "remaining_lifetime_cycles", "latent",
+    "card_chargeable", "funds_available_from", "mandate_alive",
+    "blocked_until", "channel_response_trait", "card_chargeable_at_opening",
 }
+
+# Types that may legitimately appear as an EpisodeView/ContactRecord field's
+# annotation. Anything else (e.g. a bare `object`, an unresolvable forward
+# reference, or a type imported from rrx.sim) is a potential indirect-leak
+# vector - a field typed to hold a whole object (LatentState, an engine
+# _EpisodeState, an RNG) rather than a plain observable value. Day 2 Stage
+# 4B: date/datetime dropped - RULING 1 makes every time field a relative
+# `int` day; the simulator has no calendar anchor anywhere.
+_ALLOWED_FIELD_TYPES = {"str", "int", "bool"}
 
 
 def _guarded_source_files() -> list[Path]:
@@ -207,6 +242,20 @@ def test_episode_view_exposes_no_field_outside_the_allowlist():
     )
 
 
+def test_episode_view_field_set_equals_the_allowlist_exactly():
+    """Positive set-equality (Day 2 Stage 4), not just 'no extras': the
+    prior test above only catches fields ADDED beyond the allowlist - a
+    field silently DROPPED (e.g. budget_remaining removed) would still pass
+    it, but EVAL.md §3.4 requires the agent to see every one of these
+    fields, not a subset. Fails in both directions."""
+    got = {f.name for f in fields(_episode_view())}
+    assert got == EPISODE_VIEW_ALLOWED, (
+        f"EpisodeView fields {sorted(got)} != EVAL.md §3.4 allowlist "
+        f"{sorted(EPISODE_VIEW_ALLOWED)} - missing: "
+        f"{sorted(EPISODE_VIEW_ALLOWED - got)}, extra: {sorted(got - EPISODE_VIEW_ALLOWED)}"
+    )
+
+
 def test_episode_view_exposes_no_latent_field():
     got = {f.name for f in fields(_episode_view())}
     leaked = got & LATENT_FIELD_NAMES
@@ -228,7 +277,113 @@ def test_contact_record_exposes_no_field_outside_the_allowlist():
     )
 
 
+def test_contact_record_field_set_equals_the_allowlist_exactly():
+    """Positive set-equality (Day 2 Stage 4, updated Stage 4B): entries are
+    pinned to EXACTLY (day, channel, remedy, delivered, engaged) - `day`
+    per RULING 1 (relative time, `ts` renamed), `engaged` deliberately kept
+    as observable historical information, not just absent-of-extras."""
+    got = {f.name for f in fields(_contact_record())}
+    assert got == CONTACT_RECORD_ALLOWED, (
+        f"ContactRecord fields {sorted(got)} != EVAL.md §3.4 allowlist "
+        f"{sorted(CONTACT_RECORD_ALLOWED)} - missing: "
+        f"{sorted(CONTACT_RECORD_ALLOWED - got)}, extra: {sorted(got - CONTACT_RECORD_ALLOWED)}"
+    )
+
+
 def test_contact_record_exposes_no_latent_field():
     got = {f.name for f in fields(_contact_record())}
     leaked = got & LATENT_FIELD_NAMES
     assert not leaked, f"ContactRecord exposes latent state: {sorted(leaked)}"
+
+
+# --------------------------------------------------------------------------
+# Layer 3, extended (Day 2 Stage 4) - indirect leakage through nested
+# objects/references. Full runtime-value inspection isn't possible (nothing
+# in the repository constructs an EpisodeView instance yet - see the Stage 4
+# report), so this checks what the CURRENT architecture makes checkable:
+# every field's declared type is a plain observable value type (never an
+# object reference to rrx.sim.latent.LatentState or similar), and both
+# dataclasses are frozen + slotted, which structurally forecloses attaching
+# a latent reference to an instance after construction (no __dict__ to stash
+# one in, no attribute reassignment to swap one in).
+# --------------------------------------------------------------------------
+
+def _annotation_names(cls) -> dict[str, str]:
+    """Field name -> the type name(s) written in its annotation string
+    (e.g. "tuple[ContactRecord, ...]" -> {"tuple", "ContactRecord"}).
+    String-based (not typing.get_type_hints) so this works without
+    resolving forward references, and so a field annotated with a type from
+    an unimported/unexpected module still shows up as a plain name to check
+    against the allow-list, rather than raising or silently resolving.
+    """
+    import re
+
+    out: dict[str, set[str]] = {}
+    for f in fields(cls):
+        tokens = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", f.type))
+        out[f.name] = tokens - {"None", "tuple"}
+    return out
+
+
+def test_episode_view_field_types_are_all_plain_observable_values():
+    """No EpisodeView field may be typed to hold an object reference other
+    than ContactRecord (itself checked separately) - ruling out a field
+    that could carry a whole LatentState, an engine _EpisodeState, or an
+    RNG instead of a plain value."""
+    allowed = _ALLOWED_FIELD_TYPES  # next_auto_retry_day: int | None (RULING 1)
+    for name, tokens in _annotation_names(_episode_view()).items():
+        if name == "contact_history":
+            assert tokens == {"ContactRecord"}, (name, tokens)
+            continue
+        bad = tokens - allowed
+        assert not bad, f"EpisodeView.{name} has non-observable-value type token(s): {bad}"
+
+
+def test_contact_record_field_types_are_all_plain_observable_values():
+    for name, tokens in _annotation_names(_contact_record()).items():
+        bad = tokens - _ALLOWED_FIELD_TYPES
+        assert not bad, f"ContactRecord.{name} has non-observable-value type token(s): {bad}"
+
+
+def _dummy_instance(cls):
+    kwargs = {}
+    for f in fields(cls):
+        tokens = _annotation_names(cls)[f.name]
+        if "ContactRecord" in tokens:
+            kwargs[f.name] = ()
+        elif "bool" in tokens:
+            kwargs[f.name] = True
+        elif "int" in tokens:
+            kwargs[f.name] = 0
+        elif "date" in tokens or "datetime" in tokens:
+            import datetime as _dt
+
+            kwargs[f.name] = _dt.datetime.now()
+        else:
+            kwargs[f.name] = "x"
+    return cls(**kwargs)
+
+
+def test_episode_view_and_contact_record_are_frozen():
+    """frozen=True forecloses reassigning a field to a latent reference
+    after construction."""
+    import dataclasses
+
+    for cls in (_episode_view(), _contact_record()):
+        instance = _dummy_instance(cls)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            instance.__setattr__(fields(cls)[0].name, object())
+
+
+def test_episode_view_and_contact_record_reject_arbitrary_new_attributes():
+    """slots=True forecloses stashing a latent reference under a new
+    attribute name post-construction - there is no __dict__ to hold it in.
+    frozen+slots together raise TypeError for an unknown attribute name in
+    CPython (not AttributeError - a documented interaction quirk, verified
+    empirically for this interpreter), rather than the FrozenInstanceError
+    an existing-field reassignment raises - either way, the assignment must
+    fail, which is what actually matters here."""
+    for cls in (_episode_view(), _contact_record()):
+        instance = _dummy_instance(cls)
+        with pytest.raises((AttributeError, TypeError)):
+            instance.__setattr__("_smuggled_latent_ref", object())

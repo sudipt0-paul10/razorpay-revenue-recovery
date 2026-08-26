@@ -1,5 +1,222 @@
 # Changelog
 
+## eval-spec-v1.2 — 2026-08-26
+
+Closes the specification/test inconsistency the Day 2 Stage 4B review
+identified: `EVAL.md §3.4` still specified its original 16-field
+`EpisodeView` surface while the implementation (and `tests/
+test_no_latent_leak.py`'s enforcing allowlist) had already moved to the
+narrower 10-field v1 surface documented in `SIM.md §10`. `SIM.md §0`
+authorizes *logging and reporting* such a conflict without editing
+`EVAL.md`, but not permanently redefining the enforced surface as if that
+resolved it - so `EVAL.md` needed an actual amendment, following the exact
+precedent `eval-spec-v1.1` already established for
+`send_subscription_link` (a `[DEFECT, eval-spec-vX]` footnote, the frozen
+text recorded rather than rewritten).
+
+### EVAL.md — one footnote added, frozen text unchanged
+
+`git diff -- EVAL.md`: exactly one added block, directly below §3.4's
+16-field list (verified - no other line in the file changed). The footnote
+(`[DEFECT, eval-spec-v1.2]`):
+
+- records that 6 of the 16 fields have no honest producer anywhere in the
+  built simulator (`decline_source`, `billing_cycle_day`,
+  `completed_billing_cycles`, `customer_tenure_days`,
+  `prior_pending_episodes`, `prior_recovery_channel`) and were not
+  fabricated - producing them would mean inventing a new `[MODEL]`
+  parameter or mechanism outside the frozen six;
+- records the two time-representation renames: `next_auto_retry_date` →
+  `next_auto_retry_day`, `contact_history[].ts` → `.day` - no calendar
+  anchor exists anywhere in this simulator, and none is invented;
+- enumerates, for the first time in this file, the three pre-registered
+  sources of A3 advantage §3.4's own title names but never previously
+  listed explicitly (assembled from this file's field grouping and
+  `SIM.md`'s cross-references), and states each one's v1 status:
+  retry-window timing (fully preserved), remedy matching (preserved via
+  `decline_code` alone), channel selection (narrowed to within-episode
+  adaptive contact - persistent episode-level response propensity inferred
+  from observable `contact_history.engaged`, with cross-episode
+  customer-history learning and tenure-based inference explicitly out of
+  v1).
+
+The frozen 16-field list itself is untouched - it remains the target
+surface for a future version, not a claim about what v1 delivers now.
+
+### Complete schema delta (EVAL.md §3.4 original -> v1 EpisodeView)
+
+**Removed (6, no producer anywhere in the repository, not fabricated):**
+`decline_source`, `billing_cycle_day`, `completed_billing_cycles`,
+`customer_tenure_days`, `prior_pending_episodes`, `prior_recovery_channel`.
+
+**Renamed + type-changed (2, RULING 1 - relative time, no calendar anchor):**
+`next_auto_retry_date: date | None` -> `next_auto_retry_day: int | None`;
+`ContactRecord.ts: datetime` -> `ContactRecord.day: int`.
+
+**Retained fields with narrowed/clarified semantics (2):**
+- `billing_amount_inr` - name and type unchanged, but now explicitly
+  aliased to `invoice_amount_inr` (no independent recurring-price figure
+  exists anywhere in the repository) rather than left as an independently
+  undefined quantity.
+- `decline_code` - name and type unchanged (`str`), but now explicitly
+  defined as the observable, group-level `opening_condition_key` (e.g.
+  `"ambiguous_decline"` for that bucket) rather than an unspecified
+  granularity.
+
+**Retained, unchanged (6):** `subscription_id`, `subscription_state`,
+`invoice_amount_inr`, `days_since_first_failure`, `auto_retries_remaining`,
+`budget_remaining` - and `contact_history` itself (its entry shape changed
+per the rename above, but the field's presence/role did not).
+
+### tests/test_no_latent_leak.py - enforcing test now genuinely agrees with EVAL.md
+
+Updated the module docstring and the `EPISODE_VIEW_ALLOWED` comment to
+state plainly that this allowlist enforces the CURRENT (eval-spec-v1.2
+amended) `EVAL.md §3.4`, not a stand-in that merely happens to be narrower
+than it. No change to the allowlist's actual contents (already correct
+from Stage 4B) or to any test's pass/fail behavior.
+
+### Verification
+
+- `python -m pytest -q`: see the closure report for the exact count.
+- `python -m ruff check .`: all checks passed.
+- `latent.py`, all of `configs/`, retry/outcome mechanics, and A0/A2 policy
+  behavior confirmed unmodified.
+- Tagged `eval-spec-v1.2` after tests were confirmed green (see the
+  closure report for the exact commit SHA).
+
+## Day 2 Stage 4B — 2026-08-26
+
+Completes the minimum honest EpisodeView boundary identified by the Day 2
+Stage 4 gap analysis: EpisodeView is now actually constructed from real
+simulator state, with a deliberately narrowed field set rather than
+fabricated values for the fields with no honest producer. No Stage 5, no
+A3, no gates - out of scope per this pass's brief.
+
+### RULING 1 — relative time, [DESIGN] schema ruling
+
+No calendar anchor exists anywhere in this simulator, and none is invented.
+`EpisodeView.next_auto_retry_date: date | None` → `next_auto_retry_day: int
+| None`; `ContactRecord.ts: datetime` → `ContactRecord.day: int`. Recorded
+in `SIM.md §10`.
+
+### RULING 2 — decline_code, group-level
+
+`EpisodeView.decline_code` is the observable `opening_condition_key` itself
+- `"ambiguous_decline"` for that bucket, never the resolved latent
+Bernoulli cause. Matches population.yaml's own note ("A3 and A2 both see
+only decline_code for this bucket"). Additive observation only -
+`rrx.sim.engine.build_episode_view` reads `cohort.opening_condition_key`;
+nothing about outcome resolution changes.
+
+### RULING 3 — decline_source removed
+
+Not modeled in v1: the term is undefined anywhere in `EVAL.md`, `SIM.md`,
+or any config (verified by repository-wide search). Removed from
+`EpisodeView` rather than fabricated. **v1 makes the remedy-matching
+decision using `decline_code` alone.** Recorded in `SIM.md §10`.
+
+### RULING 4 — channel-selection narrowed; no cross-episode history model
+
+`customer_tenure_days`, `prior_pending_episodes`, `prior_recovery_channel`
+removed from `EpisodeView`. The v1 channel-selection advantage is narrowed
+to within-episode adaptive contact: inferring persistent episode-level
+response propensity from observable `contact_history.engaged` alone. This
+is a genuine narrowing of `EVAL.md §3.4`'s third pre-registered advantage,
+not a silent drop - full reasoning and what remains/is removed recorded in
+`SIM.md §10`.
+
+### RULING 5 — tenure coupling not implemented
+
+Confirmed (again) that `rrx.sim.latent._sample_channel_response_trait`
+implements only the raw `Beta(mean, concentration)` draw - no
+`tenure_coupling` logit shift, no seventh model parameter, `latent.py`
+untouched this pass. `SIM.md §8`'s falsification test #5 is given a
+narrowed definition in `SIM.md §10` (concentration-only manipulation,
+matching the mechanism that actually exists) - **recorded, not implemented
+or run.** Stage 5 work.
+
+### RULING 6 — contact_history, real runtime logging
+
+`_EpisodeState.contact_history: list[ContactRecord]` (engine.py); every
+`_send_message` call now appends a record built from values it already
+computes (`day`, `channel`, a `remedy` derived from `names_card`/
+`names_dues` - `"card_change"` / `"topup_reminder"` / `"both"` for the
+dual-content automatic email, matching `SIM.md §3`'s own action table -
+`delivered=True` per `SIM.md §3`'s `"delivered (1.0 in v1)"`, and the
+already-resolved `engaged` bool). Purely observational: nothing reads
+`contact_history` back into engagement probability, card/dues effects, the
+retry gate, contact budget, or either policy. Confirmed by the full test
+suite passing unchanged (537 passed, same A0/A2 outcome behavior as before
+this pass).
+
+### RULING 7 — EpisodeView actually constructed
+
+`rrx.sim.engine.build_episode_view(cohort, state, day, episode_cfg, split,
+i) -> EpisodeView` - a positive construction (every field copied out as a
+plain value; never a reference to `state`, `cohort`, `LatentState`, or an
+RNG). Wired into `run_episode` via a new, fully backward-compatible opt-in
+parameter: `run_episode(..., capture_view_at_day=None)` returns the exact
+same bare `EpisodeResult` as before when omitted (verified: every existing
+Stage 3 test, including the byte-identical replay-determinism test, passes
+unchanged); passing an integer day additionally returns
+`(EpisodeResult, EpisodeView | None)`, the `EpisodeView` captured as of the
+end of that day's mechanics (`None` if that day is never reached - the
+`subscription_cancelled_by_customer` early-return path). No agent or
+planner created; nothing consumes the view for policy decisions.
+
+### RULING 8 — final field set, billing-fields investigation
+
+Investigated per the ruling before implementing:
+- `billing_amount_inr` — **retained**, aliased to `invoice_amount_inr`. No
+  separate recurring-price figure exists anywhere in the repository;
+  `model_params.yaml`'s `valued_at: billing_amount_inr` never distinguishes
+  the two. Defensible equivalence, not invention.
+- `billing_cycle_day`, `completed_billing_cycles` — **removed/deferred**.
+  No distribution or producer exists anywhere in the repository for
+  either. Not invented.
+- `subscription_id` — `f"{split}-{i}"`, the deterministic existing episode
+  identity, as directed.
+
+**Final v1 EpisodeView field set (10 fields, down from EVAL.md §3.4's 16):**
+`subscription_id`, `subscription_state`, `invoice_amount_inr`,
+`days_since_first_failure`, `auto_retries_remaining`,
+`next_auto_retry_day`, `decline_code`, `billing_amount_inr`,
+`contact_history`, `budget_remaining`.
+
+### RULING 9 — EVAL.md untouched; conflict recorded in SIM.md instead
+
+`EVAL.md` was not modified. The narrowing conflict with `EVAL.md §3.4`'s
+16-field list is recorded explicitly in `SIM.md §10` (new section, per
+`SIM.md §0`'s own rule: conflicts with `EVAL.md` are "a defect to be logged
+and reported, never resolved by editing `EVAL.md`"), and in this entry.
+The v1 observable surface is narrower than `EVAL.md §3.4`'s original list;
+this is stated plainly, not minimized.
+
+### RULING 10 — tests
+
+New `tests/test_episode_view_construction.py` (16 tests): real runtime
+construction, backward-compatible default return, `None` on an unreached
+day, capture determinism, `contact_history` population and remedy mapping,
+no-simulator-object check on real constructed instances, relative-day
+retry-window fields (before/during/after halt), `decline_code` group-level
+mapping (including `ambiguous_decline` specifically), `billing_amount_inr`
+aliasing, and removed-fields-absent. `tests/test_no_latent_leak.py` updated
+for the narrowed allowlists (`EPISODE_VIEW_ALLOWED`, `CONTACT_RECORD_
+ALLOWED`, `_ALLOWED_FIELD_TYPES` - `date`/`datetime` dropped, no longer
+used by any field) - all 18 of its tests (12 pre-existing Stage 4 + this
+pass's field-set updates) still pass.
+
+### Verification
+
+- Targeted: `tests/test_no_latent_leak.py` (18 passed),
+  `tests/test_episode_view_construction.py` (16 passed).
+- `python -m pytest -q`: 537 passed.
+- `python -m ruff check .`: all checks passed.
+- `latent.py`, all of `configs/`, `EVAL.md`, retry/outcome mechanics, and
+  A0/A2 policy behavior confirmed unmodified.
+- Not committed.
+
 ## Day 2 Stage 3 — 2026-08-26
 
 Thin end-to-end simulator: cohort generator, clock/retry engine,

@@ -181,6 +181,49 @@ contact_history[] : (ts, channel, remedy, delivered, engaged)
 budget_remaining : contacts
 ```
 
+[DEFECT, eval-spec-v1.2] Day 2 Stage 4 (2026-08-26) found that 6 of the 16
+fields above have no honest producer anywhere in the built simulator — no
+distribution or mechanism for `decline_source`, `billing_cycle_day`,
+`completed_billing_cycles`, `customer_tenure_days`, `prior_pending_episodes`,
+or `prior_recovery_channel` exists in any config or code, not because they
+are unimportant but because producing them would mean inventing a new
+`[MODEL]` parameter or mechanism outside the frozen six the sweep grid
+registers. Per this project's standing rule against fabricating plausible
+values, they are **not** invented. `rrx.features.episode_view.EpisodeView`
+implements a narrower v1 surface (10 fields; full reasoning in `SIM.md §10`,
+amendment record in `CHANGELOG.md`) instead. The 16-field list above is
+recorded, not rewritten, per `§10` — it is the target surface for a future
+version, not a claim about what v1 currently delivers.
+
+Two fields are renamed, not removed, for the same reason: this simulator
+has no calendar anchor anywhere (only relative days, T+0…T+30) and none is
+invented. `next_auto_retry_date` (`date | None`) → `next_auto_retry_day`
+(`int | None`); `contact_history[]`'s `ts` → `day` (`int`).
+
+The three pre-registered sources of A3 advantage this section names in its
+own title — assembled here from this section's field grouping and `SIM.md`'s
+cross-references, since this file has not previously enumerated them by
+name — and their v1 status:
+
+1. **Retry-window timing** (`days_since_first_failure`,
+   `auto_retries_remaining`, `next_auto_retry_day`) — fully preserved; all
+   three are real, derived quantities in v1.
+2. **Remedy matching** (`decline_code`; `decline_source` removed) —
+   preserved via `decline_code` alone: the observable, group-level opening
+   condition (e.g. `ambiguous_decline` for that bucket), never a resolved
+   latent cause. `decline_source` is undefined anywhere in this
+   specification and is not part of v1's remedy-matching signal.
+3. **Channel selection** (`contact_history[].engaged`;
+   `customer_tenure_days`, `prior_pending_episodes`, `prior_recovery_channel`
+   removed) — narrowed to **within-episode adaptive contact**: inferring
+   persistent episode-level response propensity from observable
+   `contact_history.engaged` within the current episode, and deciding
+   whether/how often to contact further. Cross-episode customer-history
+   learning and tenure-based inference are explicitly **not** part of v1: no
+   customer-history model spans episodes, and `episode.yaml`'s tenure-
+   coupling formula (`logit(θ_c) += 0.35 × z(customer_tenure_days)`) is not
+   implemented in `rrx.sim.latent`.
+
 ---
 
 ## 5. Metrics

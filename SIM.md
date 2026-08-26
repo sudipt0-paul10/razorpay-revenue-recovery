@@ -411,3 +411,88 @@ Listed only — not implemented in this stage.
   clearance is `Uniform(0, 2]` days, `episode.yaml#/latent/bank_technical_error_clearance`.
   Previously an open gap, absent from all configs; folded into the
   `balance_restore_timing` `[MODEL]` family, not a seventh parameter.
+
+---
+
+## §10. EpisodeView boundary — v1 narrowing (Day 2 Stage 4B, 2026-08-26)
+
+`EVAL.md §3.4` lists 16 fields as the complete agent-facing surface.
+`rrx.features.episode_view.EpisodeView` (Day 2 Stage 4B) implements a
+**deliberately narrower 10-field v1 boundary**, recorded here per this
+document's own §0 rule ("Any conflict discovered between this document and
+`EVAL.md` is a defect to be logged and reported, never resolved by editing
+`EVAL.md`") rather than by silently editing `EVAL.md §3.4`. Six fields are
+removed because no honest producer exists for them in this repository, not
+because they are unimportant:
+
+- **`decline_source`** — undefined anywhere in `EVAL.md`, this document, or
+  any config (verified by repository-wide search, Day 2 Stage 4 gap
+  analysis). Removed rather than fabricated. **v1 makes the remedy-matching
+  decision using `decline_code` alone.**
+- **`billing_cycle_day`, `completed_billing_cycles`** — no distribution or
+  producer exists anywhere in the repository for either (only an ad hoc
+  `Generator(999_999)` inside one *test*, never a real simulator producer,
+  for `billing_cycle_day`). Inventing a distribution for either was
+  explicitly ruled out. Removed/deferred, not fabricated.
+- **`customer_tenure_days`, `prior_pending_episodes`,
+  `prior_recovery_channel`** — see the channel-selection narrowing below.
+
+Two fields are renamed, not removed, per a **[DESIGN] schema ruling**: this
+simulator has no calendar anchor anywhere and none is invented to support
+them. `next_auto_retry_date: date | None` → `next_auto_retry_day: int | None`;
+`ContactRecord.ts: datetime` → `ContactRecord.day: int`. Both remain
+relative-day integers (T+0…T+30), consistent with every other time
+quantity in this document.
+
+`billing_amount_inr` is **retained**, aliased to `invoice_amount_inr`: no
+separate recurring-price figure exists anywhere in the repository —
+`invoice_amount_inr` is the only price this simulator ever defines, and
+`model_params.yaml`'s `valued_at: billing_amount_inr` never distinguishes
+the two.
+
+### Channel-selection advantage, narrowed
+
+`EVAL.md §3.4`'s third pre-registered advantage (channel selection) is
+narrowed for v1, per this section's "Interpretation note" above (channel
+*ranking* was already established as not the inferable signal), one step
+further: **v1 does not build a cross-episode customer-history model.**
+`customer_tenure_days`, `prior_pending_episodes`, and
+`prior_recovery_channel` are removed from `EpisodeView` entirely. The v1
+channel-selection advantage is narrowed to:
+
+> within-episode adaptive contact: infer persistent episode-level response
+> propensity from observable `contact_history.engaged` and decide
+> whether/how often to contact.
+
+This remains a genuine, real signal in v1: `channel_response_trait` (θ_c)
+is drawn once per episode and reused for every message sent in that
+episode (§3), so engagement observed on an earlier contact genuinely
+correlates with engagement on a later one within the same episode. What is
+explicitly **not** claimed for v1: cross-episode relationship learning, or
+tenure-based inference of any kind.
+
+### Tenure coupling — not implemented in v1
+
+`EVAL.md §3.3`'s tenure-coupling formula (`logit(θ_c) += 0.35 ×
+z(customer_tenure_days)`) is **not implemented anywhere in `rrx.sim.latent`**
+— `_sample_channel_response_trait` draws only the raw `Beta(mean,
+concentration)` value. This was true before Stage 4B and remains true after
+it: Stage 4B does not add a seventh population/model parameter, does not
+modify `latent.py`, does not modify `_sample_channel_response_trait`, and
+does not invent a tenure distribution.
+
+**§8 falsification test #5, narrowed definition (recorded, NOT implemented
+or run in Stage 4B):** as originally written, test #5 requires both
+`concentration` → very large AND `tenure_coupling.beta = 0` to collapse the
+responsiveness-inference advantage to zero — but `tenure_coupling` already
+never runs regardless of its configured value, so the `beta = 0` half of
+that manipulation currently has no discriminating power (see the Day 2
+Stage 4 gap analysis). The test is narrowed to match the mechanism that
+actually exists in v1:
+
+> force `channel_response_propensity.customer_trait` concentration to a
+> very large value, collapsing cross-customer variance in persistent
+> episode-level response propensity; verify that the within-episode
+> adaptive-contact advantage (above) collapses toward noise.
+
+This narrowed test is not run in Stage 4B and remains a Stage 5 item.
