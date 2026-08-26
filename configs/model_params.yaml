@@ -31,7 +31,10 @@ sweep:
     comparator: A2
   majority_threshold: 0.80       # locked decision 5
   rounding: ceil                 # ceil(0.80 * 22) = 18
-  frozen_policies: [A2, A3]      # locked decision 14 - no per-cell retuning
+  frozen_policies: [A2, A3-D, A3-LLM]  # locked decision 14 - no per-cell
+    # retuning. AMENDED eval-spec-v1.4: "A3" split into its two
+    # pre-registered named arms (EVAL.md §4.2). win_criterion.comparator
+    # above is UNCHANGED (A2).
   common_random_numbers:
     enabled: true                # locked decision 14
     # DEFECT 6 FIX: naive shared streams mean perturbing one parameter

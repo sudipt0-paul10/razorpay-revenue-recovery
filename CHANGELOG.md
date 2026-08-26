@@ -1,5 +1,105 @@
 # Changelog
 
+## eval-spec-v1.4 — A3 design freeze — 2026-08-27
+
+Documentation-only amendment. `sim-v1`
+(`bbfa55d68a97ca9f41a9b151477b193db5054ffe`) and `src/rrx/sim/` are
+untouched by this pass. Companion document: `docs/A3-DESIGN.md`.
+
+### Provenance correction (recorded, not silently fixed)
+
+The §3.5/§8/§9 recovery (previous commit) was originally framed as
+"recover from the `eval-spec-v1` tagged source." That tag
+(`0617f78fa16c0434a5f89d5637c4ca48454c167f`) was cut *after* the
+undocumented deletion in `337e0060e9f5af013e4b8362623a06d47a5ee67a`, so it
+does not itself contain the missing sections. The actual source used —
+matching the method `eval-spec-v1.3` already established for §4/§6/§7 —
+is `337e006~1` = `d04d158b1a6d8919d0777f73cd58ed26f316d28a`.
+
+### Verification-driven correction
+
+`run_stage3.py` and both `diagnostics/day3_*.py` scripts write nothing to
+`results/` (only `open()` call in `run_stage3.py` is a config *read* of
+`costs.yaml`). `results/sensitivity.md` is 100% `PENDING` for all 22
+cells — no sweep has ever been executed, for A2 or anyone. An earlier
+draft of this amendment assumed "A2's existing full-dev sweep numbers"
+could be "preserved and republished unchanged" — corrected in `EVAL.md
+§6A`: A2's full-dev sweep is scheduled to run for the first time under
+this amendment, independent of and unaffected by A3.
+
+### A. A3-D formally distinct (`EVAL.md §4.2`)
+
+Ablation + control arm, shares runner/gate/executor/ledger/wake-up
+cadence with A3-LLM. Must clear all §5.2 gates; not required to clear
+§7's 40%-gap criterion. A3-D≥A3-LLM outcome pre-registered as a
+publishable finding, not a re-tuning trigger.
+
+### B. "fallback-to-A2 rate" superseded (`EVAL.md §5.3`)
+
+Frozen phrase preserved verbatim; amendment states the fallback target is
+A3-D, with five admissible fallback reasons.
+
+### C. Four-field decision-audit taxonomy (`EVAL.md §5.4`)
+
+`tick_type` (4 values), `reason_code` (**7** values — `terminal_state`
+removed this pass, see F below), `gate_rule_fired` (R1–R8),
+`fallback_reason` (5 values). Admissible `reason_code` per `decline_code`:
+`docs/A3-DESIGN.md §7`. Kept fully separate from `data/decline_codes.yaml`.
+
+### D. Tuning budget, sweep subsample, pairing, repeat-run nesting, cost
+control (`EVAL.md §6A`)
+
+A3-LLM N=6 (tuned on the 500-episode subsample, only the selected
+configuration re-run on full `dev`) / A3-D N=3, `results/tuning_log.md`.
+500-episode sweep subsample (seeds 1000-1499) for A3-LLM; A2 additionally
+evaluated on the same 500 indices for paired comparison, separate from
+its own full-dev canonical sweep. A3-D swept at full dev. Pre-registered
+sweep-cost contingency (A3-D full 22 cells / A3-LLM nominal + the 4
+`channel_response_propensity`/`card_change_completion_propensity` cells)
+declared now, to be invoked only with an explicit `results/sensitivity.md`
+note if needed — never silently. 300-episode repeat-run subsample nested
+inside the 500, three live runs, three separate cache files.
+
+### E. `configs/model_params.yaml` — `frozen_policies` amended
+
+`[A2, A3]` → `[A2, A3-D, A3-LLM]`. `win_criterion.comparator` **unchanged**
+(`A2`). Locked file — applied this pass with explicit authorization.
+
+### F. Design decisions closing prior open questions, plus one narrowing
+
+Wake-up set frozen: `{0,1,2,3,5,7,14}` + engagement-triggered, suppressed
+on terminal state or exhausted budget (`docs/A3-DESIGN.md §5`) — same
+contact budget as every other arm (3), more decision points, not more
+actions. Channel pinned to `whatsapp` for both A3 arms — this **removes**
+an advantage A3 would otherwise hold over every arm hardcoding
+`AGENT_CHANNEL`; `whatsapp`'s multiplier (1.15 vs `sms` 1.00 vs `email`
+0.65, `episode.yaml:164-167`) is supporting evidence, not the argument.
+Action space narrowed to CONTACT/WAIT/STOP. `reason_code` narrowed from
+8 to **7** values: `terminal_state` removed — `subscription_cancelled_by_customer`
+episodes terminate at T=0 before any runner tick exists at all
+(`engine.py:438-443`), so the code was unreachable by construction; `R2`
+(contacts to cancelled/expired subscriptions) remains in the gate,
+exercised only by synthetic adversarial test proposals. New `EVAL.md §8`
+item 8: the 5% cancelled-at-open bucket's zero-contact behaviour is
+enforced by the environment for every arm, not demonstrated by A3 —
+flagged against overclaiming in any pitch/README. Module locations:
+runner, policy, planner, prompt builder, gate, **and ledger** all under
+`src/rrx/agent/` (gate and ledger moved inside the guarded package this
+pass, closing the `GUARDED_PACKAGES` coverage gap by placement —
+`test_no_latent_leak.py` is NOT modified). Gate tests driven by synthetic
+adversarial proposals, not A3-D/A3-LLM output. New `docs/A3-DESIGN.md
+§22` artifact policy: per-episode ledgers and LLM caches gitignored; a
+~20-episode curated `results/audit_sample/` committed as the public
+audit-trail deliverable; manifests and aggregate results always
+committed. Both open questions from the prior design pass are resolved —
+`docs/A3-DESIGN.md §21` is empty this pass.
+
+### Verification
+
+- `python -m pytest -q`: run after this commit — see report.
+- `python -m ruff check .`: run after this commit — see report.
+- `git diff --stat -- src/rrx/sim/`: confirmed empty.
+
 ## eval-spec-v1.3 — Day 3 evaluation cleanup — 2026-08-27
 
 **NOT YET COMMITTED.** Prepared and verified in the working tree; this

@@ -267,6 +267,9 @@ Identical episodes, identical latent worlds, identical 3-contact budget — exce
 | **A3 — Agent** | LLM planner → deterministic gate → executor | The submission |
 | **A4 — Oracle** | Full latent access; same 3-contact budget as A1/A2/A3 | Empirical upper reference — **not a target** (§7). |
 
+[AMENDMENT, eval-spec-v1.4] The "A3 — Agent" row above is preserved
+unrewritten. §4.2 below names the two arms that implement it.
+
 ### 4.1 A2 — three published variants `[DESIGN]`
 
 Three separately-defined, separately-labelled A2 variants exist. **A2-original is retained for transparency; A2-corrected-v1 and A2-strengthened are distinct decisions with distinct rationales — they are not the same claim and must not be reported as one.**
@@ -308,6 +311,36 @@ A2-corrected-v1, plus: the card-broken bucket's T+5 contact is **restored as a t
 - Contacts 09:00–21:00 IST only; ≤3 per episode — unchanged from A2-original.
 
 Implemented alongside A2-corrected-v1 as `rrx.baselines.a2_variants.a2_strengthened_action_for_day`, same non-modification of `src/rrx/sim/`.
+
+### 4.2 A3 — two pre-registered arms `[AMENDMENT, eval-spec-v1.4]`
+
+**A3-D** — deterministic-policy ablation and control arm. Same feature
+layer (`EpisodeView`), same runner, gate, executor, ledger, and wake-up
+cadence as A3-LLM (`docs/A3-DESIGN.md §2-§3, §5, §10`). Differs from
+A3-LLM only in the policy/planner implementation: a pure, deterministic
+function of `EpisodeView`, no network call, no randomness beyond the
+shared CRN substreams every arm already draws from equally. **Must clear
+every §5.2 gate invariant, exactly as A3-LLM must. Is NOT required to
+clear §7's 40%-of-gap criterion** — it is instrumental to the comparison
+below, not itself a candidate for "the submission."
+
+**A3-LLM** — the LLM-planner arm. Same runner/gate/executor/ledger as
+A3-D. On any LLM failure (timeout, unparseable output, schema violation,
+gate rejection, stale state at gate-check time) falls back to A3-D's own
+decision for that tick; the episode's aggregate outcome is still
+attributed to arm `A3-LLM`, with the specific fallen-back ticks marked
+distinctly in the ledger — see `docs/A3-DESIGN.md §11, §14`.
+
+**Comparison.** A3-LLM's contribution is reported as A3-LLM − A3-D,
+paired bootstrap (§6), same methodology already used for A0-vs-A2, over
+the same episode indices — world-level CRN pairing holds; per-message
+pairing does not (§8 item 7).
+
+**Declared outcome, pre-registered now:** if A3-D outperforms A3-LLM on
+either primary metric, that is published as the finding. A3-LLM is not
+re-tuned in response — the same discipline this file's §7 "Declared
+failure" paragraph already applies to A3 vs. the bounded baselines
+applies here to A3-D vs. A3-LLM.
 
 ---
 
@@ -358,6 +391,23 @@ The first gate is the important one: **Razorpay exposes no merchant-triggered re
 
 A non-zero value on any row is a P0 bug with a written post-mortem, not a score to improve. Caps must equal `global_caps` in `data/decline_codes.yaml`; `tests/test_caps_sync.py` asserts it.
 
+[AMENDMENT, eval-spec-v1.4] The gate table above is unmodified. A3's
+gate-rule mapping is `docs/A3-DESIGN.md §8`. Two rows are enforced **by
+construction**, not by a rejected proposal:
+- Row 5 (contact-budget cap): the A3 runner never invokes the planner
+  once `budget_remaining == 0`, mirroring `engine.py:464`. A day where
+  the planner is never asked to propose is logged as
+  `tick_type=budget_exhausted`, never fabricated as a gate rejection.
+- Row 6 (quiet hours): **declared vacuous in `sim-v1`.** The simulator is
+  day-granular with no intraday time-of-day model, so there is no live
+  timing decision to gate. The executor stamps a fixed, always-compliant
+  `send_hour = 10:00 IST` on every message it sends; the gate rule
+  validates that stamped constant; the corresponding test asserts zero
+  violations by construction. Row 2 (contacts to cancelled/expired
+  subscriptions) is likewise never exercised by real A3 runner ticks in
+  `sim-v1` — see §8 item 8 — and is tested only via synthetic adversarial
+  proposals (`docs/A3-DESIGN.md §8`).
+
 ### 5.3 Agent reliability
 
 - % actions carrying a machine-readable reason code + rationale: 100% `[INVARIANT]`
@@ -366,6 +416,43 @@ A non-zero value on any row is a P0 bug with a written post-mortem, not a score 
 - Invalid/unparseable LLM output rate; fallback-to-A2 rate
 - Unknown-condition escalation rate
 - LLM cost and tokens per episode
+
+[AMENDMENT, eval-spec-v1.4] Three clarifications to the bullet list
+above, preserved verbatim rather than rewritten:
+
+1. **"fallback-to-A2 rate" is superseded by fallback-to-A3-D rate** —
+   (ledger records with a non-null fallback reason) / (total A3-LLM
+   wake-up decisions). The five admissible fallback reasons (`timeout`,
+   `unparseable`, `schema_violation`, `gate_rejected`, `stale_state`) are
+   in `docs/A3-DESIGN.md §7, §14`.
+2. **"`wait` rate" for A3 is defined as WAIT decisions / wake-up
+   decisions** — non-wake-up ticks are excluded from the denominator.
+   Counting every day (0–30) would put `wait_rate` near 90% for every arm
+   under A3's fixed 7-day wake-up schedule (§4.2, `docs/A3-DESIGN.md §5`)
+   and measure the runner's fixed schedule, not the agent's restraint.
+3. **"Unknown-condition escalation rate" is computed as STOP decisions
+   with `reason_code=risk_flagged`** — `escalate_to_merchant` is not a
+   distinct action type in A3's action space (`docs/A3-DESIGN.md §1,
+   §6`); escalation is represented as STOP + `risk_flagged`.
+
+### 5.4 A3 decision-audit taxonomy `[AMENDMENT, eval-spec-v1.4]`
+
+Every A3 tick (wakeup or not, A3-D or A3-LLM) produces exactly one
+ledger record carrying a four-part, closed, project-internal taxonomy:
+
+- `tick_type`: `wakeup | no_wakeup | budget_exhausted | terminal_suppressed`
+- `reason_code` (7 values, populated only on `wakeup` ticks):
+  `remedy_match_card, remedy_match_topup, retry_window_open,
+  post_halt_rescue, engagement_observed, no_engagement_restraint,
+  risk_flagged`
+- `gate_rule_fired`: `R1–R8 | null`
+- `fallback_reason`: `timeout | unparseable | schema_violation |
+  gate_rejected | stale_state | null`
+
+None of this is a field of, or a modification to, `data/decline_codes.yaml`
+— kept separate from that file's existing `agent_action` field. Full
+contract, including the admissible-`reason_code`-per-`decline_code`
+table, is `docs/A3-DESIGN.md §7`.
 
 ---
 
@@ -378,6 +465,56 @@ A point estimate with no interval is not a result.
 Every run writes `results/<run_id>/manifest.json`: git SHA, spec version, config hash, seed, arm, regime, sweep cell, model version, timestamp, wall-clock, LLM cost. Reproducible via `make eval RUN=<run_id>`.
 
 [DEFECT, eval-spec-v1.3] This requirement — and this entire section — was deleted, undocumented, in commit `337e0060e9f5af013e4b8362623a06d47a5ee67a` ("Complete Day 1 evaluation infrastructure", 2026-08-25). `CHANGELOG.md` did not exist at that commit (first added in `9305725cc6927d86f41b8df2779e1929926b5404`), so no removal note was possible at the time, and none was added retroactively until this restoration. `configs/`, `src/rrx/sim/`, and `data/decline_codes.yaml` were frozen at `sim-v1` (commit `bbfa55d68a97ca9f41a9b151477b193db5054ffe`) with this gap still open — the `sim-v1` `CHANGELOG.md` entry already says so explicitly ("No config-hash or manifest-file mechanism exists anywhere in this repository... that machinery must exist before the first evaluation run"). The minimal writer implementing exactly this eleven-field schema is `rrx.spec.manifest` (`RunManifest`, `write_manifest`, `current_git_sha`, `config_hash`) — not yet wired into any evaluation harness, since no such harness exists before A3.
+
+### 6A. Pre-registered A3 tuning and sweep subsample `[AMENDMENT, eval-spec-v1.4]`
+
+**Tuning budget**, pre-registered before any dev-split tuning run: A3-LLM
+N = 6 dev configurations; A3-D N = 3 dev configurations. The 6 A3-LLM
+configurations are evaluated on the 500-episode subsample (seeds
+1000–1499, below) — **not** full `dev` — to bound tuning cost; only the
+**selected** configuration is subsequently run on full `dev`. Every
+configuration tried, including losing ones, is recorded in
+`results/tuning_log.md`. Distinct from, and does not relax,
+`configs/model_params.yaml`'s existing `frozen_policies` / "no per-cell
+retuning" rule (locked decision 14): the tuning budget governs a
+one-time, pre-freeze selection; once frozen, the selected configuration
+runs unmodified across every sweep cell exactly as that rule requires.
+Both constraints apply, at different points in the process.
+
+**Sweep subsample and pairing requirement.** A3-LLM is swept at 500
+`dev` episodes — the first 500 `dev` indices in seed order (seeds
+1000–1499), all six `[MODEL]` parameters retained. **Because paired
+bootstrap requires an identical episode set for both arms being
+compared, every comparator arm in an A3-LLM comparison (e.g. A2) is
+additionally evaluated on that same 500-index set for that specific
+comparison** — a separate evaluation of the comparator, not a substitute
+for its own canonical run. A3-D, being deterministic and free, is swept
+at the full `dev` split (N=2,000, all 22 cells).
+
+**A2's canonical full-dev sweep is scheduled as independent,
+deterministic work, not blocked on A3.** `results/sensitivity.md` is
+currently `PENDING` for all 22 cells — no sweep has been run for any
+arm. This amendment schedules A2's full-dev sweep to populate it, on its
+own timeline, separate from the 500-index A2 comparator run used only
+for pairing against A3-LLM.
+
+**Pre-registered sweep-cost contingency, declared now, before any
+results exist — never to be applied silently:** if A3-LLM's full
+22-cell sweep cost proves prohibitive, the reduced fallback is A3-D swept
+across all 22 cells (unaffected — free) and A3-LLM swept across the
+nominal (unperturbed baseline) cell plus the four cells for
+`channel_response_propensity` (low, high) and
+`card_change_completion_propensity` (low, high) only. Any such reduction
+must be declared explicitly in `results/sensitivity.md`, naming which
+cells were skipped and why — it is a pre-approved, bounded contingency,
+not a discretionary scope cut discovered after the fact.
+
+**Repeat-run subsample (LLM nondeterminism, §8 item 4).** Nested inside
+the 500-episode sweep subsample: the first 300 indices, seeds
+1000–1299. Three **live** runs under `--allow-live`, each writing its
+own cache file (`llm_cache_rep1.jsonl`, `rep2.jsonl`, `rep3.jsonl`) —
+replaying one shared cache across the three would make them byte-
+identical by construction and the nondeterminism measurement vacuous.
 
 ---
 
@@ -442,6 +579,39 @@ identical footnote above for full provenance). **Not modified** to
 reflect A3 — the original six items are reproduced exactly as written
 before any agent code existed. Items 7 and 8 below, and the amendment
 note on item 4, are new v1.4 additions, not part of this recovery.
+
+7. **[ADDED, eval-spec-v1.4] A3 CRN pairing granularity.** World-level
+   latent draws (cohort, physical state, customer traits) are identical
+   across all arms including A3-D/A3-LLM — full CRN pairing holds at the
+   episode/world level. Per-message engagement draws are keyed by an
+   arm-local message-index counter (`engine.py:206-207`, `rrx.sim.rng`),
+   so they are **not** perfectly paired across arms that send different
+   numbers/orderings of messages — this includes A3-LLM vs A3-D. Treated
+   as increased variance in the paired-bootstrap estimate, not as bias.
+   See `docs/A3-DESIGN.md §15`.
+8. **[ADDED, eval-spec-v1.4] The 5% cancelled-at-open bucket produces
+   zero contacts for every arm, by environment construction, not agent
+   behaviour.** Episodes opening with `subscription_cancelled_by_customer`
+   terminate at T=0, before any per-day tick of any kind runs
+   (`engine.py:438-443`) — not merely before any *contact* is sent. This
+   applies identically to A0/A1/A2/A4 and to A3-D/A3-LLM: no policy of
+   any kind is ever invoked for this bucket, and none of it can be. The
+   §3.2/§5 "restraint" observed on this bucket (and on the all-`cancelled`
+   `stress` cohort, §3.5) is **enforced by the environment, not
+   demonstrated by the agent** — no pitch, README, or results claim may
+   describe it as evidence of A3's restraint or judgement. Flagged for
+   definitive verification once the A3 runner is implemented
+   (`docs/A3-DESIGN.md §7, §20, §21`).
+
+[AMENDMENT, eval-spec-v1.4] Item 4 above ("3 repeat runs on a
+300-episode subsample") is this document's ORIGINAL, pre-agent-code plan
+for LLM nondeterminism and is preserved unrewritten. It coexists with
+`docs/A3-DESIGN.md §13`'s cache-replay contract (a different concern —
+exact reproducibility of one past run, not repeat-run variance at a
+fixed configuration) and with §6A's 500-episode sweep subsample: the
+300-episode repeat-run subsample is nested inside the 500-episode sweep
+subsample (dev seeds 1000–1299 ⊂ 1000–1499 ⊂ 1000–2999) — see §6A and
+`docs/A3-DESIGN.md §13, §18`.
 
 ---
 
