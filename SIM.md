@@ -71,6 +71,11 @@ those live in §3 and §4. Covers all nine opening conditions from `EVAL.md §3.
 Unless stated otherwise, `mandate_alive = TRUE` and `blocked_until` = never at
 T=0 for all rows except `cancelled`.
 
+**Discovered semantic clarification (2026-08-26):** for `transaction_limit_exceeded`
+and `payment_risk_check_failed`, "never" means `blocked_until` is set beyond
+every auto-retry day (T+1…T+3), so `§4`'s `t >= blocked_until` gate can never
+be satisfied for these two conditions within the episode.
+
 ---
 
 ## §3. Actions → physical state, via message CONTENT, never via correctness
