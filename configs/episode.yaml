@@ -188,6 +188,22 @@ latent:
     independent_of_visible_signals: true
     clamp: [0.0, 1.0]
 
+  bank_technical_error_clearance:
+    provenance: invented_synthetic
+    dist: uniform
+    support_days: [0, 2]
+    rationale: >
+      EVAL 3.2 states the correct remedy is "wait - auto-retry likely
+      resolves it". Requires clearance inside the retry window.
+      P(clear before T+1) = 0.5, P(clear before T+2) = 1.0.
+    sweep_required: true
+    component_of: balance_restore_timing
+    note: >
+      Q1 gap resolution (2026-08-26, eval-spec-v1.1). Not a new [MODEL]
+      family - folds into balance_restore_timing (transient resolution
+      timing) in configs/model_params.yaml, alongside the existing
+      balance_restore_delay mixture above.
+
   cancellation:
     provenance: invented_synthetic
 

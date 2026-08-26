@@ -89,13 +89,23 @@ opening_conditions:
     correct_remedy: send_payment_method_change_prompt
     urgency: immediate
     report_separately: true
-    UNRESOLVED_intra_group_split: true
+    UNRESOLVED_intra_group_split: false
+    p_card_cause: 0.50
+    basis: project_inference
+    rationale: >
+      Maximum entropy over two causes. The code is ambiguous by construction
+      and no signal distinguishes them. Near arm-neutral: A3 and A2 both see
+      only decline_code for this bucket.
     note: >
       EVAL.md 3.2 assigns 24% to "card_declined / payment_failed" as a single row
       and does not specify how to divide it between the two codes. decline_codes.yaml
       treats them as distinct codes with equivalent documented descriptions.
-      NOT split here, because inventing a split would be a silent assumption.
-      Resolve in EVAL before sim-v1.
+      Originally NOT split here, because inventing a split would have been a
+      silent assumption. Resolved 2026-08-26 (Q1 gap resolution, eval-spec-v1.1):
+      p_card_cause=0.50 above is now a recorded config value with a stated
+      selection rule, not a silent assumption. Folded into the
+      failure_mix_weights [MODEL] family in configs/model_params.yaml; not a
+      seventh parameter.
 
   - key: card_expired
     kind: decline_code

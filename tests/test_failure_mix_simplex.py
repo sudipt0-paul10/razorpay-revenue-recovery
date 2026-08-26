@@ -12,6 +12,7 @@ from rrx.spec.registry import (
     load_registry,
     perturb_bucket,
     resolve_owner_path,
+    scalar_valued_handles,
 )
 
 reg = load_registry()
@@ -91,10 +92,35 @@ def test_within_bucket_ratios_preserved(bucket, direction):
 
 
 def test_all_generated_failure_mix_cells_are_valid_simplexes():
+    """eval-spec-v1.1: failure_mix_weights now also carries
+    ambiguous_cause_split's scalar p_card_cause cells (not a bucket-mass
+    perturbation), so this loop is scoped to dict-valued (bucket-vector)
+    cells only. See test_scalar_cells_are_declared_scalar_not_corrupted_
+    vectors below for the companion check that keeps this guard honest."""
     for c in enumerate_cells(reg):
-        if c.parameter != "failure_mix_weights":
+        if c.parameter != "failure_mix_weights" or not isinstance(c.value, dict):
             continue
         assert sum(c.value.values()) == pytest.approx(1.0, abs=TOL), c.cell_id
         cond = expand_to_conditions(c.value, MEMBERS, CONDITIONS)
         assert sum(cond.values()) == pytest.approx(1.0, abs=TOL), c.cell_id
         assert all(v >= 0 for v in cond.values()), c.cell_id
+
+
+def test_scalar_cells_are_declared_scalar_not_corrupted_vectors():
+    """Companion to the isinstance(c.value, dict) guard above. Without this,
+    a future bucket-vector cell malformed into a scalar would be silently
+    skipped by that guard rather than caught. Every failure_mix_weights cell
+    whose value is NOT a dict must correspond to a handle explicitly
+    declared scalar-valued in model_params.yaml's definition: block
+    (eval-spec-v1.1's ambiguous_cause_split.p_card_cause); any other
+    non-dict cell is a defect, not an expected shape."""
+    scalar_handles = scalar_valued_handles(reg, "failure_mix_weights")
+    assert scalar_handles, "expected at least ambiguous_cause_split's p_card_cause"
+    for c in enumerate_cells(reg):
+        if c.parameter != "failure_mix_weights" or isinstance(c.value, dict):
+            continue
+        assert c.handle in scalar_handles, (
+            f"{c.cell_id}: scalar-valued (value={c.value!r}) but handle "
+            f"{c.handle!r} is not declared scalar in model_params.yaml "
+            f"(declared scalar handles: {sorted(scalar_handles)})"
+        )

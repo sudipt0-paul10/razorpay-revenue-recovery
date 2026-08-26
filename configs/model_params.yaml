@@ -91,6 +91,34 @@ parameters:
     kind: vector_simplex
     owner_path: "population.yaml#/failure_mix"
     regime: [B, A]
+    definition:
+      # Q1 gap resolution (2026-08-26, eval-spec-v1.1). Not a new bucket and
+      # not a seventh [MODEL] family - folds into the existing "ambiguous"
+      # bucket below (bucket_mass perturbation), but is INDEPENDENTLY swept
+      # in its own right: it is a [MODEL] magnitude in its own right, not a
+      # fixed within-bucket ratio, and EVAL.md §0 requires every [MODEL]
+      # magnitude to reach the sweep grid.
+      # DEFECT (2026-08-26): this entry was originally marked
+      # sweep_required: true with no sweep.cells, so it silently contributed
+      # zero cells to enumerate_cells(). test_model_params_swept did not
+      # catch it because it only checked top-level handles, never anything
+      # nested inside definition:. Fixed here; see
+      # tests/test_model_params_swept.py::test_all_sweep_required_entries_produce_cells.
+      ambiguous_cause_split:
+        p_card_cause: 0.50
+        basis: project_inference
+        rationale: >
+          Maximum entropy over two causes. The code is ambiguous by
+          construction and no signal distinguishes them. Near arm-neutral:
+          A3 and A2 both see only decline_code for this bucket.
+        owner_path: "population.yaml#/opening_conditions (ambiguous_decline entry)"
+        sweep_required: true
+        sweep:
+          magnitude: 0.30
+          handle: p_card_cause
+          cells:
+            low: 0.35
+            high: 0.65
     handle:
       name: bucket_mass
       transform: multiplicative
@@ -162,6 +190,32 @@ parameters:
         provenance: invented_synthetic
         swept: false                   # <-- DEFECT 1: see toggle above
         confidence: low
+      # Q1 gap resolution (2026-08-26, eval-spec-v1.1). Not a seventh
+      # [MODEL] family - folds into transient resolution timing alongside
+      # the components mixture above, but is INDEPENDENTLY swept: it is a
+      # [MODEL] magnitude in its own right, not a fixed component of the
+      # balance_restore_delay mixture above.
+      # DEFECT (2026-08-26): this entry was originally marked
+      # sweep_required: true with no sweep.cells, so it silently contributed
+      # zero cells to enumerate_cells(). Fixed here; see
+      # tests/test_model_params_swept.py::test_all_sweep_required_entries_produce_cells.
+      transient_block_clearance:
+        provenance: invented_synthetic
+        dist: uniform
+        support_days: [0, 2]
+        applies_to: bank_technical_error
+        rationale: >
+          EVAL 3.2 states the correct remedy is "wait - auto-retry likely
+          resolves it". Requires clearance inside the retry window.
+          P(clear before T+1) = 0.5, P(clear before T+2) = 1.0.
+        owner_path: "episode.yaml#/latent/bank_technical_error_clearance"
+        sweep_required: true
+        sweep:
+          magnitude: 0.30
+          handle: support_days_upper_bound
+          cells:
+            low: [0, 1.4]
+            high: [0, 2.6]
     handle:
       name: salary_mode_mass
       transform: multiplicative

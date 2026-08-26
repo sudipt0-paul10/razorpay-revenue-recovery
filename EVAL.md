@@ -49,6 +49,8 @@ Its verified action space `[CITE]`:
 | `wait` | **An explicit, logged action.** Restraint must be a decision, not an absence of one. |
 | `stop_episode` | Terminal |
 
+[DEFECT, eval-spec-v1.1] The `send_subscription_link` row's `[CITE]` is not supported for domestic cards. Q1 research (2026-08-26) found no primary documentation for a customer-facing link that clears an already-failed subscription invoice on a domestic card. The action is excluded from the v1 action space; see `SIM.md §3` and `§9`. Recorded rather than rewritten, to preserve the frozen text.
+
 Razorpay independently sends the customer a payment-failure email containing a card-change link `[CITE]`. That email is part of the world, not an arm's choice, and every arm — including A0 — operates on top of it. The agent's contacts are **additional** to it, which is why they carry annoyance cost.
 
 ### 1.3 Two things are recoverable, and they are not the same
