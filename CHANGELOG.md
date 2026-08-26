@@ -1,5 +1,329 @@
 # Changelog
 
+## eval-spec-v1.3 — Day 3 evaluation cleanup — 2026-08-27
+
+**NOT YET COMMITTED.** Prepared and verified in the working tree; this
+entry documents the proposed change set for final review before
+commit/tag. `sim-v1` (commit
+`bbfa55d68a97ca9f41a9b151477b193db5054ffe`) is untouched: everything below
+either lives outside `src/rrx/sim/` (`rrx.baselines.a2_variants`,
+`rrx.spec.manifest`, new/updated tests) or is a documentation-only change
+to `EVAL.md`/`CHANGELOG.md`. No holdout split used anywhere in this
+entry — all measurements are `dev`, `range(1000, 3000)`,
+`MASTER_SEED=20260825`, reproducible via
+`diagnostics/day3_baseline_headroom.py` (non-canonical; writes nothing to
+`results/`).
+
+### A. A2 T+5→T+3 validity correction (`EVAL.md §4.1.1`)
+
+**Original A2-original schedule** for the card-broken bucket
+(`card_expired`, `debit_instrument_blocked`, `card_not_enabled_group`):
+card-change prompt at T+0, repeat at T+5 — unchanged, still exactly what
+`rrx.sim.engine.a2_action_for_day` (arm key `A2`) does.
+
+**The §1.1/§1.3 contradiction:** `EVAL.md §1.1` — "Razorpay retries
+failed subscription auto-charges automatically... for cards, T+1, T+2,
+T+3... after which the Subscription moves to `halted`." `EVAL.md §1.3` —
+"Invoice recovery... Only possible while auto-retries remain (T+1…T+3)."
+`episode.yaml`'s `halt_boundary_day: 3` encodes the same boundary in the
+frozen simulator. A2-original's own second card-broken contact is
+scheduled at T+5 — after every one of these boundaries — so it is
+structurally incapable of ever affecting invoice recovery, contradicting
+the spec's own stated invoice-recovery window.
+
+**Discovery:** this contradiction was surfaced by the Day 3 pre-agent
+diagnostic (`diagnostics/day3_diagnostic.py`, then confirmed
+quantitatively by `diagnostics/day3_baseline_headroom.py`), not invented
+after the fact to justify a result already seen — the reasoning above
+(§1.1/§1.3 + `halt_boundary_day`) stands on its own without reference to
+any A1/A4 comparison.
+
+Three changes to A2's schedule, each derivable purely from this project's
+own frozen mechanics (`EVAL.md §1.1/§1.3`, `episode.yaml`) — none of them
+requires comparing to A1 or A4 to justify:
+
+1. Card-broken bucket's second card-change contact: T+5 → T+3, because
+   invoice recovery is only possible while auto-retries remain
+   (T+1…T+3; `episode.yaml`'s `halt_boundary_day: 3`) — a T+5 contact for
+   this bucket's invoice-relevant remedy cannot, structurally, affect
+   invoice recovery.
+2. `bank_technical_error`'s T+5 contact restores the `subscription_state
+   in (pending, halted)` guard — this exact conditional ("card-change
+   prompt at T+5 **if still failing**") was present in `EVAL.md §4` before
+   it was deleted (see "EVAL.md §4/§6/§7 restoration" below) and was
+   dropped by the implementation. `episode.yaml`'s
+   `bank_technical_error_clearance` support is `[0, 2]` days, so recovery
+   is always resolved by the day-2 auto-retry: on the `dev` cohort,
+   **51/51** `bank_technical_error` episodes recover under A0 alone (zero
+   contact), so A2-original's unguarded T+5 contact is a certain no-op
+   100% of the time.
+3. `transaction_limit_exceeded`'s T+5 card-change fallback is removed —
+   `card_chargeable=True` at opening for this condition (`rrx.sim.latent`
+   `_MECHANISM_ISOLATED_KEYS` branch), identical to `insufficient_funds`,
+   so card-change is an equally guaranteed no-op. `EVAL.md §5.2`'s
+   remedy-match gate row is widened to name both conditions.
+
+Same contact count as A2-original on the card-broken bucket (2, retimed).
+Measured effect (`dev`, N=2000), both primary metrics: card-broken
+subgroup invoice recovery 0.2923 → 0.3947 (matches A1's 0.3947 on this
+subgroup exactly, using fewer/equal contacts), rescue 0.4481 → 0.4525;
+whole-cohort invoice recovery 0.4485 → 0.4830, rescue 0.5180 → 0.5195.
+
+**A2-original is retained and runnable, unmodified**, under arm key `A2`
+(`rrx.sim.engine.a2_action_for_day`) — this correction lives entirely in
+the new `rrx.baselines.a2_variants` module (§ "Implementation location"
+below), so it changes nothing about what `A2` already means in every
+prior `CHANGELOG.md` entry or test.
+
+### B. A2-strengthening — separate baseline decision (`EVAL.md §4.1.2`)
+
+**This is a baseline STRENGTHENING, explicitly not the same rationale as
+the correction above** — reported as a distinct decision per the
+instruction not to blur the two. Where §A corrects a schedule point that
+contradicted the spec's own invoice-recovery boundary, §B adds a NEW,
+additional contact that was never present in A2-original at all, and
+does so for a reason that has nothing to do with invoice recovery.
+
+A2-corrected-v1 plus: the card-broken bucket's T+5 contact is restored as
+a **third** contact (T+0/T+3/T+5), spending the full 3-contact budget on
+a rescue mechanism the frozen simulator already defines
+(`episode.yaml#/payment_method_change_effect/while_halted` →
+`subscription_rescued`) and that A2-corrected-v1 leaves unused for this
+bucket. Zero invoice-recovery cost (post-halt structurally cannot help
+invoice recovery); measured rescue-rate gain on `dev`, card-broken
+subgroup: 0.4525 → 0.5089 (+5.6 points) over A2-corrected-v1, at no cost
+elsewhere. Whole-cohort: invoice recovery unchanged at 0.4830 (as
+expected — this bucket's invoice outcome cannot move post-halt);
+subscription rescue 0.5195 → 0.5385.
+
+**Adopted as "the" A2 — the final bounded A2 for the `EVAL.md §7`
+comparator, before any A3 code exists.** It weakly dominates
+A2-corrected-v1 on both primary metrics on `dev` (equal invoice recovery,
+higher rescue). `EVAL.md §4.1.2` now states the adopted schedule
+explicitly (not just as a diff against A2-original), so the baseline is
+reconstructable from the specification alone.
+
+### C. `bank_technical_error` guard and `transaction_limit_exceeded` gate correction
+
+Documented together because both are §A's items 2/3, restated here as
+their own entry per the review's request for a separately-visible record:
+
+- **`bank_technical_error`**: the adopted schedule's T+5 card-change
+  contact now requires `subscription_state in (pending, halted)` — the
+  "if still pending/halted" condition A2-original's implementation was
+  missing (A2-original sends this contact unconditionally). Diagnostic
+  evidence: 51/51 `dev`-cohort `bank_technical_error` episodes already
+  recover under A0 (zero contact), so the unguarded T+5 contact was a
+  certain no-op every time; the guard means it is now *never actually
+  sent* for this condition, since it can never still be pending/halted
+  by T+5.
+- **`transaction_limit_exceeded`**: `EVAL.md §5.2`'s remedy-match gate
+  row is widened from naming only `insufficient_funds` to naming both
+  conditions — `card_chargeable=True` at opening makes card-change an
+  equally guaranteed no-op for `transaction_limit_exceeded`, so the same
+  gate principle now applies to both.
+
+**Tests** (`tests/test_engine_policies.py`): the three tests that pinned
+A2-original's old schedule for these conditions —
+`test_a2_card_broken_bucket_schedule`,
+`test_a2_bank_technical_error_schedule_no_contact_before_t3`,
+`test_a2_transaction_limit_exceeded_schedule_fallback_removed` (renamed
+2026-08-27 from `test_a2_transaction_limit_exceeded_schedule_keeps_
+fallback`, once that name started describing the opposite of what the
+test asserts; assertions unchanged by the rename) — are updated to assert
+the adopted (A2-strengthened) schedule instead, importing
+`a2_strengthened_action_for_day` from `rrx.baselines.a2_variants` for
+that purpose; `rrx.sim.engine.a2_action_for_day` itself is not imported
+differently and not modified. `test_a2_never_sends_card_change_for_
+insufficient_funds` is untouched, per the review's explicit instruction.
+A2-original's own exact schedule for all three conditions is
+independently preserved by a new test, `tests/test_a2_variants.py::
+test_a2_original_schedule_preserved_for_transparency`, which pins
+`engine.a2_action_for_day` directly — nothing about A2-original's
+coverage was weakened, only relocated to a test whose name says what it
+actually tests.
+
+### Implementation location
+
+Both variants (`a2_corrected_v1_action_for_day`,
+`a2_strengthened_action_for_day`) live in the new module
+`src/rrx/baselines/a2_variants.py` — **outside** `src/rrx/sim/`, which
+`sim-v1` freezes. They delegate to `rrx.sim.engine.a2_action_for_day` for
+every unchanged branch and are registered into
+`rrx.sim.engine._POLICIES` at runtime only (the same pattern
+`tests/test_stage5_falsification.py` already uses for its own scratch
+arms), never by editing `engine.py`. `engine.a2_action_for_day` itself is
+byte-for-byte unmodified — `tests/test_a2_variants.py::
+test_a2_original_unmodified_by_this_module` asserts this directly (same
+function object, before and after import), which is the direct evidence
+that A2-original stays reproducible under arm key `A2`.
+
+Tests: `tests/test_a2_variants.py` — pins both variants' exact schedules
+(including the three changes above), confirms both delegate to
+`engine.a2_action_for_day` unchanged for every other condition, extends
+the remedy-match-gate check (never sends card-change for
+`insufficient_funds` or `transaction_limit_exceeded`) over a real batch
+run for both variants, pins A2-original's own unmodified schedule
+separately (§C above), and asserts `engine.a2_action_for_day` is the same
+function object before and after import (guards against accidental
+monkeypatching).
+
+### Comparator rule (`EVAL.md §7`, criteria 2–3)
+
+Previously (pre-337e006 text): uplift measured against A2 alone, on both
+metrics jointly. Revised: for each primary metric independently, A3 is
+compared against **the best-performing bounded non-agent arm on that same
+metric** — bounded arms = {A0, A1, A2 (final adopted, i.e.
+A2-strengthened)}. A4 excluded (oracle/reference); diagnostic/scratch
+arms excluded. Ties (95% CI on the pairwise difference includes zero)
+are reported explicitly rather than resolved by point estimate alone —
+on `dev`, A1 (0.4840) and A2-corrected-v1 (0.4830) are such a tie on
+invoice recovery (diff -0.0010, CI [-0.0080, +0.0060]).
+
+The contact criterion (`§7` criterion 3) is revised to always use the
+same bounded arm that won the rate comparison for that metric, rather
+than a fixed reference arm — so a different arm can be the invoice-rate
+comparator and the rescue-rate comparator, and the contact criterion
+tracks whichever one applies to the metric in question.
+
+### D. §7 target revision (`EVAL.md §7`)
+
+**Original target**, preserved verbatim in `EVAL.md §7` for the record:
+**"≥15% relative uplift `[DESIGN]` in subscription rescue rate vs A2 on
+`holdout`, at equal-or-fewer contacts."**
+
+**Measured oracle headroom** (`dev`, `diagnostics/day3_baseline_
+headroom.py`): A4 vs the best-performing bounded arm per metric — invoice
+recovery +0.0625 absolute (A4 0.5465 vs A1 0.4840, **12.9% relative**);
+subscription rescue +0.0285 absolute (A4 0.5670 vs A2-strengthened
+0.5385, **5.3% relative**).
+
+**Why the original target was unreachable:** the original ≥15% relative
+target was written before any oracle headroom had been measured — no `dev`
+or `holdout` run existed yet to check it against. Once measured, 15%
+relative on rescue is roughly 3× the actual, empirically observed A4
+headroom of 5.3% — i.e. it asks A3 to close more than the entire
+oracle-to-best-bounded gap, which is impossible by construction (A4 is
+the upper reference). Against A2-original specifically (rescue 0.5180)
+the target requires reaching 0.5957, which exceeds even the `dev` A4
+figure of 0.5670 — unreachable regardless of which A2 baseline is used.
+Additionally: A4's decision rule is lexicographic on invoice recovery and
+does not reserve a contact for post-halt rescue, so A4 is not
+rescue-optimal and the true rescue ceiling is somewhat higher than 0.5670
+— which makes the original target's unreachability, if anything,
+understated here, not overstated.
+
+**New target:** A3 captures ≥40% of the A4 minus best-bounded-arm gap on
+both primary metrics on `holdout` `[DESIGN]` — a target, not an
+expectation, exactly like the original. The `dev` figures above (12.9% /
+5.3%, and the illustrative absolute values below) are **headroom
+evidence, not a fixed holdout target** — no holdout run has been
+performed, and the actual target is whatever this formula evaluates to
+once `holdout` is run:
+
+| Metric | A4 (dev) | Best bounded (dev) | Gap | 40% of gap | Illustrative target |
+|---|---:|---:|---:|---:|---:|
+| Invoice recovery | 0.5465 | A1: 0.4840 | +0.0625 | +0.0250 | ≥0.5090 |
+| Subscription rescue | 0.5670 | A2-strengthened: 0.5385 | +0.0285 | +0.0114 | ≥0.5499 |
+
+Why 40%: no closed-form derivation exists for this number — it is a
+`[DESIGN]` choice reflecting that A4 has full latent access A3 will never
+have (the gap is not fully closeable in principle), while still requiring
+A3 to close a majority-fraction of the empirically demonstrated headroom
+rather than an arbitrary absolute percentage the `dev` measurement
+already shows is unreachable.
+
+### E. Manifest requirement (`EVAL.md §6`) and the undocumented prior removal
+
+`EVAL.md §6`'s manifest requirement — "Every run writes
+`results/<run_id>/manifest.json`: git SHA, spec version, config hash,
+seed, arm, regime, sweep cell, model version, timestamp, wall-clock, LLM
+cost" — was present in `EVAL.md` from its first committed version
+(`176c6efb75943143268efdf33b61d59499c5aef5`, "Add evaluation spec and
+payment decline taxonomy") and was **deleted, along with all of §4, §6,
+§7, §8, and §9, in commit
+`337e0060e9f5af013e4b8362623a06d47a5ee67a`** ("Complete Day 1 evaluation
+infrastructure", 2026-08-25 15:51:57 +0530) — a 212-net-line rewrite of
+`EVAL.md`. **`CHANGELOG.md` did not exist at that time** (first added in
+commit `9305725cc6927d86f41b8df2779e1929926b5404`, "Freeze eval-spec-v1.1"
+— which post-dates `337e006`), so no contemporaneous removal note was
+possible. No removal note was added retroactively either, until this
+entry — the `sim-v1` entry below (added `2026-08-26`, well after the
+removal) is the first place this repository documents that the manifest
+mechanism does not exist, and it documents the absence without tracing
+it to a specific deleting commit. This entry closes that gap.
+
+Restored `EVAL.md §6` verbatim (same eleven fields, same wording) plus a
+`[DEFECT, eval-spec-v1.3]` note carrying the above history. Minimal
+implementation, reproducing the historical schema exactly — no field
+added, renamed in meaning, or dropped:
+
+- `src/rrx/spec/manifest.py` — `RunManifest` (a frozen dataclass with
+  exactly the eleven fields, snake_cased for Python/JSON:
+  `git_sha, spec_version, config_hash, seed, arm, regime, sweep_cell,
+  model_version, timestamp, wall_clock_seconds, llm_cost_inr`),
+  `current_git_sha()`, `config_hash(*paths)`, `write_manifest(manifest,
+  run_id, results_dir)`. `results_dir` is always caller-supplied — never
+  defaulted to the repository's real `results/` — so this module cannot
+  itself produce a canonical-looking artifact. Not wired into any
+  evaluation harness; none exists yet (no A3).
+- `tests/test_manifest.py` — schema-completeness check (exactly the eleven
+  fields, no more/fewer), write/read round-trip into `tmp_path`, a check
+  that writing a manifest never touches the repository's actual
+  `results/` directory, and sanity checks on `current_git_sha`/
+  `config_hash`.
+
+### EVAL.md §4/§6/§7 restoration — git-history evidence
+
+`337e0060e9f5af013e4b8362623a06d47a5ee67a` deleted five sections from
+`EVAL.md` in one pass: §4 (Arms, including A2's original written
+schedule), §6 (Seeds and statistics, including the manifest requirement),
+§7 (Pre-registered success criteria, including the 15% target), §8
+(Threats to validity), §9 (Definitions) — verified via `git show
+337e0060e9f5af013e4b8362623a06d47a5ee67a -- EVAL.md`. This entry restores
+**only §4, §6, and §7**, per the Day 3 review's explicit scope — §3.5
+(Splits), §8, and §9 were also deleted in the same commit and remain
+missing, flagged explicitly in `EVAL.md` (a note directly below §7) as an
+open, undecided gap rather than silently reintroduced or silently
+omitted.
+
+The restored §4's original A2 schedule (`git show 337e006~1:EVAL.md`)
+confirms, independently of `rrx.sim.engine.a2_action_for_day`'s own
+docstring, that a T+5 card-change fallback for `insufficient_funds` was
+originally written into the spec (grouped with `transaction_limit_
+exceeded`) and was already absent from the implementation before this
+entry — i.e. the implementation's insufficient_funds/§5.2-gate compliance
+predates and is independent of this restoration. It also confirms
+`bank_technical_error`'s original text carried the "if still failing"
+conditional that A2-corrected-v1 restores (above) — that fix is a
+reversion to previously-written intent, not new design.
+
+### Verification
+
+- `python -m pytest -q`: 564 passed, 1 failed. The one failure is
+  `tests/test_stage5_falsification.py::test_1_policy_ordering`, the
+  same, previously-documented, expected rejection (`A2-ish did not
+  significantly beat A1-ish on invoice recovery: diff=-0.0355
+  CI=[-0.0465,-0.0250]`) already recorded in this file's `Day 2 Stage 5`
+  and `sim-v1` entries — unaffected by anything in this entry, since that
+  test exercises `A2` (A2-original) unchanged. Not treated as a
+  regression to fix.
+- `python -m ruff check .`: all checks passed.
+- `git diff --stat -- EVAL.md configs/ data/decline_codes.yaml tests/test_model_params_registry.py tests/test_sweep_grid.py tests/test_failure_mix_simplex.py src/rrx/sim/ SIM.md`
+  shows zero changes under `src/rrx/sim/` or `SIM.md`; the only locked
+  file touched is `EVAL.md` itself, per this entry's explicit approval.
+- `git rev-parse sim-v1` still resolves to
+  `bbfa55d68a97ca9f41a9b151477b193db5054ffe` — the tag was not moved.
+
+### Not done in this entry
+
+No commit, tag, or push. No holdout run. No `sim-v2`. No A3/agent code.
+`EVAL.md §3.5`, `§8`, `§9` not restored (flagged, not silently handled
+either way). `rrx.spec.manifest`'s writer was built and reviewed in a
+prior pass, before this entry's "restore the specification only" scope
+was set — it was not extended, wired into a harness, or otherwise
+expanded in this entry.
+
 ## sim-v1 — simulator freeze — 2026-08-26
 
 Freeze-only stage. No simulator, config, or test change. Freezes the

@@ -156,7 +156,7 @@ A cancellation changes `subscription_state` and therefore **affects Regime-B res
 
 Per §1.2, Razorpay's automatic failure email is not a contact and carries **no hazard**, so A0's cancellation hazard is exactly zero.
 
-The magnitude is set deliberately small. At `h0 = 0.010`, saving one contact per episode buys roughly 1–2 percentage points of rescue rate through this channel — at most a quarter of §7's 15% relative target. The remainder must come from remedy matching and retry-window timing. A large hazard would let A3 clear the bar by being quiet, resting the whole result on an unsourced number.
+The magnitude is set deliberately small. At `h0 = 0.010`, saving one contact per episode buys roughly 1–2 percentage points of rescue rate through this channel — at most a quarter of §7's original 15% relative target (superseded by §7's `eval-spec-v1.3` revision; this sentence is left as originally written since the qualitative point — this channel alone cannot carry the target — still holds under the revised target too). The remainder must come from remedy matching and retry-window timing. A large hazard would let A3 clear the bar by being quiet, resting the whole result on an unsourced number.
 
 **Remaining subscription lifetime** `[MODEL]`, Regime A only — `Geometric(mean 9 further billing cycles)`, valued at `billing_amount_inr`. A **component** of the cancellation/LTV parameter, not a seventh parameter.
 
@@ -226,6 +226,65 @@ name — and their v1 status:
 
 ---
 
+## 4. Arms
+
+Identical episodes, identical latent worlds, identical 3-contact budget — except A1-U.
+
+[DEFECT, eval-spec-v1.3] This section was deleted, without a `CHANGELOG.md` entry, in commit `337e0060e9f5af013e4b8362623a06d47a5ee67a` ("Complete Day 1 evaluation infrastructure", 2026-08-25) — before `CHANGELOG.md` existed (first added in `9305725cc6927d86f41b8df2779e1929926b5404`). Restored here from that commit's parent (`git show 337e006~1:EVAL.md`); the A0/A1/A1-U/A3/A4 rows are the original, unchanged text. §4.1's A2 sub-definitions are updated per the Day 3 baseline-resolution review — `CHANGELOG.md`'s `eval-spec-v1.3` entry has the full history and the evidence behind each change.
+
+| Arm | Behaviour | Purpose |
+|---|---|---|
+| **A0 — Razorpay default** | No merchant contact. Auto-retries and Razorpay's failure email still occur. | Floor. **Not zero recovery** — Razorpay's own email recovers some. |
+| **A1 — Naive dunning** | Same two contacts to everyone at T+0 and T+3, regardless of state or reason | Strawman |
+| **A1-U — Unbounded** | A1 with the contact cap removed, safety gates still on | **Measures** whether more contact always helps. Diagnostic; excluded from headline. |
+| **A2 — Competent rules** | Three published variants, §4.1 | The bounded, competent baseline. Uplift is reported against the best-performing bounded arm per metric (§7), not hardcoded to any one arm. |
+| **A3 — Agent** | LLM planner → deterministic gate → executor | The submission |
+| **A4 — Oracle** | Full latent access; same 3-contact budget as A1/A2/A3 | Empirical upper reference — **not a target** (§7). |
+
+### 4.1 A2 — three published variants `[DESIGN]`
+
+Three separately-defined, separately-labelled A2 variants exist. **A2-original is retained for transparency; A2-corrected-v1 and A2-strengthened are distinct decisions with distinct rationales — they are not the same claim and must not be reported as one.**
+
+**A2-original** — the schedule as first implemented (`rrx.sim.engine.a2_action_for_day`, frozen unmodified under `sim-v1`, commit `bbfa55d68a97ca9f41a9b151477b193db5054ffe`):
+
+- `card_expired`, `debit_instrument_blocked`, `card_not_enabled_group`: card-change prompt at T+0, repeat at T+5.
+- `insufficient_funds`: top-up reminder at T+1 only — no card-change fallback (§5.2's remedy-match gate).
+- `transaction_limit_exceeded`: top-up reminder at T+1; card-change prompt at T+5 if still `pending`/`halted`.
+- `ambiguous_decline`: card-change prompt at T+0 (fail-safe), repeat at T+7.
+- `bank_technical_error`: no contact before T+5; card-change prompt at T+5, unconditionally.
+- Subscription `cancelled` or `payment_risk_check_failed`: no contact.
+- Contacts 09:00–21:00 IST only; ≤3 per episode.
+
+Retained, unmodified, and still runnable (arm key `A2`) for transparency and as the historical Stage 3–6 reference point (every prior `CHANGELOG.md` entry citing "A2" means this exact schedule). **Not used in the headline comparator (§7)** — its card-broken-bucket and `bank_technical_error` scheduling defects (below) measurably understate what a mechanically-consistent non-agent policy achieves; see `CHANGELOG.md`.
+
+#### 4.1.1 A2-corrected-v1 — CORRECTION, not tuning `[DESIGN]`
+
+Three changes, each justified purely from this spec's own mechanics (§1.1/§1.3/§5.2) and the frozen simulator's own config, independent of any comparison to A1 or A4:
+
+1. **Card-broken bucket's second contact: T+5 → T+3.** §1.1/§1.3: auto-retries run T+1…T+3; invoice recovery is "only possible while auto-retries remain." `episode.yaml`'s `halt_boundary_day: 3` is the same boundary. A contact scheduled at T+5 for this bucket's invoice-relevant remedy lands after the only window in which it could ever matter for invoice recovery.
+2. **`bank_technical_error`'s T+5 contact is guarded by `subscription_state in (pending, halted)`**, restoring — verbatim — the "card-change prompt at T+5 **if still failing**" conditional present in the pre-337e006 text above (§4.1's A2-original listing) but dropped from the implementation. `episode.yaml`'s `bank_technical_error_clearance` support is `[0, 2]` days, so recovery is always resolved by the day-2 auto-retry — the unguarded version fires a certain-to-be-useless contact 100% of the time (confirmed on the `dev` cohort, N=51 of 51).
+3. **`transaction_limit_exceeded`'s T+5 card-change fallback is removed.** `SIM.md`'s latent model gives this condition `card_chargeable=True` at opening, identically to `insufficient_funds` — card-change is an equally guaranteed no-op (`_apply_card_naming_effect` no-ops whenever `card_chargeable` is already true). §5.2's remedy-match gate is widened (this file's gate table, above) to cover this mechanically identical condition; it was previously an inconsistent, unnamed carve-out, not a considered exception. `blocked_until=∞` for this condition means invoice recovery is impossible in-window regardless — this change affects only wasted-contact accounting, never the invoice/rescue metrics.
+
+Same contact count as A2-original on the card-broken bucket (2, retimed, not added). Implemented outside `src/rrx/sim/` as `rrx.baselines.a2_variants.a2_corrected_v1_action_for_day` — `sim-v1`'s frozen `rrx.sim.engine` is not modified; see that module's docstring.
+
+#### 4.1.2 A2-strengthened — STRENGTHENING, a distinct decision `[DESIGN]`
+
+A2-corrected-v1, plus: the card-broken bucket's T+5 contact is **restored as a third contact** (T+0/T+3/T+5), using the full 3-contact budget. This is **not** a correction of §4.1.1 — it deliberately spends budget on a mechanism the frozen simulator already defines (`episode.yaml#/payment_method_change_effect/while_halted` → `subscription_rescued`; `card_chargeable_at_opening=False` for this bucket makes the post-halt rescue path reachable) and that A2-original/corrected-v1 leave unused. Zero invoice-recovery cost — structurally impossible to affect invoice recovery post-halt. Measured rescue-rate gain on `dev`, card-broken bucket only: +5.6 points over A2-corrected-v1, at no cost elsewhere.
+
+**Adopted as "the" A2 — the final bounded A2 used in the §7 comparator.** Complete schedule, for reconstruction from this specification alone (not just from `rrx.baselines.a2_variants.a2_strengthened_action_for_day`'s source):
+
+- `card_expired`, `debit_instrument_blocked`, `card_not_enabled_group`: card-change prompt at T+0, T+3, **and** T+5 (T+3 is §4.1.1's validity correction; T+5 is this section's rescue-only strengthening).
+- `insufficient_funds`: top-up reminder at T+1 only — unchanged from A2-original.
+- `transaction_limit_exceeded`: top-up reminder at T+1 only — no card-change fallback (§4.1.1 item 3; §5.2's widened remedy-match gate).
+- `ambiguous_decline`: card-change prompt at T+0 (fail-safe), repeat at T+7 — unchanged from A2-original.
+- `bank_technical_error`: card-change prompt at T+5 **only if** `subscription_state` is still `pending`/`halted` (§4.1.1 item 2) — in practice this guard is always false on this condition (recovery is certain by T+2), so the contact is never actually sent.
+- Subscription `cancelled` or `payment_risk_check_failed`: no contact — unchanged from A2-original.
+- Contacts 09:00–21:00 IST only; ≤3 per episode — unchanged from A2-original.
+
+Implemented alongside A2-corrected-v1 as `rrx.baselines.a2_variants.a2_strengthened_action_for_day`, same non-modification of `src/rrx/sim/`.
+
+---
+
 ## 5. Metrics
 
 **Primary (Regime B — counted)**
@@ -262,7 +321,7 @@ Fee figures are **published reference pricing used by this simulation**, not any
 |---|---:|---|
 | **Agent-initiated payment retries** | **0** | `test_gate_no_retry_action.py` |
 | Contacts to `cancelled` or `expired` Subscriptions | 0 | `test_gate_terminal_states.py` |
-| Card-change prompts for `insufficient_funds` | 0 | `test_gate_remedy_match.py` |
+| Card-change prompts for `insufficient_funds` or `transaction_limit_exceeded` | 0 | `test_gate_remedy_match.py` |
 | Contacts after `payment_risk_check_failed` | 0 | `test_gate_risk_stop.py` |
 | Contacts exceeding the 3-contact budget | 0 | `test_gate_caps.py` |
 | Contacts outside 09:00–21:00 IST | 0 | `test_gate_quiet_hours.py` |
@@ -281,6 +340,42 @@ A non-zero value on any row is a P0 bug with a written post-mortem, not a score 
 - Invalid/unparseable LLM output rate; fallback-to-A2 rate
 - Unknown-condition escalation rate
 - LLM cost and tokens per episode
+
+---
+
+## 6. Seeds and statistics
+
+All `[DESIGN]`: master seed `20260825`; `seed_i = hash(master, split, i)`; common random numbers, so episode *i*'s latent world is identical across arms; paired bootstrap, 10,000 resamples, 95% CI on the difference between arms.
+
+A point estimate with no interval is not a result.
+
+Every run writes `results/<run_id>/manifest.json`: git SHA, spec version, config hash, seed, arm, regime, sweep cell, model version, timestamp, wall-clock, LLM cost. Reproducible via `make eval RUN=<run_id>`.
+
+[DEFECT, eval-spec-v1.3] This requirement — and this entire section — was deleted, undocumented, in commit `337e0060e9f5af013e4b8362623a06d47a5ee67a` ("Complete Day 1 evaluation infrastructure", 2026-08-25). `CHANGELOG.md` did not exist at that commit (first added in `9305725cc6927d86f41b8df2779e1929926b5404`), so no removal note was possible at the time, and none was added retroactively until this restoration. `configs/`, `src/rrx/sim/`, and `data/decline_codes.yaml` were frozen at `sim-v1` (commit `bbfa55d68a97ca9f41a9b151477b193db5054ffe`) with this gap still open — the `sim-v1` `CHANGELOG.md` entry already says so explicitly ("No config-hash or manifest-file mechanism exists anywhere in this repository... that machinery must exist before the first evaluation run"). The minimal writer implementing exactly this eleven-field schema is `rrx.spec.manifest` (`RunManifest`, `write_manifest`, `current_git_sha`, `config_hash`) — not yet wired into any evaluation harness, since no such harness exists before A3.
+
+---
+
+## 7. Pre-registered success criteria
+
+1. All §5.2 invariants hold on `dev`, `holdout`, `stress`.
+2. On `holdout` under Regime B: for EACH primary metric (invoice recovery rate, subscription rescue rate) independently, A3's rate exceeds the best-performing bounded non-agent arm's rate on that same metric, 95% CI on the difference excluding zero. Bounded non-agent arms = {A0, A1, A2 (as finally adopted, §4.1)}. A4 is excluded — oracle/reference, not a deployable comparator — as are diagnostic/scratch arms (e.g. A1-U). If two or more bounded arms are statistically indistinguishable on a metric (95% CI on their pairwise difference includes zero), that tie is reported explicitly, not silently resolved by point estimate alone.
+3. Total contacts (A3) ≤ total contacts (comparator arm from criterion 2, same metric), **and** contacts per rescue (A3) ≤ that same comparator arm's. The contact criterion always uses the SAME bounded arm that won the rate comparison for that metric — never a different or fixed arm.
+4. Uplift attributable to the §3.4 structures, with unexplained residual reported.
+5. Graceful handling of three injected failure modes — API timeout, malformed/hallucinated LLM action, subscription state changing mid-episode — run continuing, failure visible in the ledger.
+
+[DEFECT, eval-spec-v1.3] This section was deleted, undocumented, in the same commit named in §6's footnote. Criteria 1, 4, 5 above are the original text, unchanged. Criteria 2 and 3 are revised from the original (quoted below) per the Day 3 baseline-resolution review, once `dev`-split measurement showed the original target was unreachable under this simulator — `CHANGELOG.md`'s `eval-spec-v1.3` entry has the full derivation and the empirical numbers behind it.
+
+**Original criteria 2/3 and target, as written before this revision (preserved for the record — not the current requirement):** "On `holdout` under Regime B: invoice recovery rate **and** subscription rescue rate (A3) > A2, 95% CI on each difference excluding zero." / "Total contacts (A3) ≤ total contacts (A2) across the cohort, **and** contacts per rescue (A3) ≤ A2." / **Target:** "≥15% relative uplift `[DESIGN]` in subscription rescue rate vs A2 on `holdout`, at equal-or-fewer contacts. A target, not an expectation."
+
+**Revised target `[DESIGN]`:** A3 captures ≥40% of the A4 minus best-bounded-arm gap on both primary metrics on `holdout`. The original ≥15% relative target was set before oracle headroom was measured and is retained in the changelog; measured `dev` headroom is 12.9% relative (invoice) and 5.3% (rescue), so 15% was not achievable by any policy. A4's rule is lexicographic on invoice recovery and does not reserve a post-halt rescue contact, so it is not rescue-optimal and the true rescue ceiling is somewhat higher.
+
+The `dev` figures above (12.9% / 5.3%, and the illustrative absolute values below) are **headroom evidence, not a fixed holdout target** — the actual target is whatever the ≥40%-of-gap formula evaluates to once `holdout` is run; no holdout run has been performed. Illustrative `dev` values only: invoice recovery ≥ 0.5090 (best-bounded A1 at 0.4840 + 40% of the +0.0625 A4 gap); subscription rescue ≥ 0.5499 (best-bounded A2-strengthened at 0.5385 + 40% of the +0.0285 A4 gap).
+
+**Declared failure:** if A3 cannot beat the best-performing bounded arm at equal contact budget, we report that, keep the harness, and pitch the gating and audit layer as the contribution. We do not re-tune until the number looks good and quietly re-run `holdout`.
+
+---
+
+**Note on this restoration's scope [eval-spec-v1.3]:** commit `337e006` also deleted §3.5 (Splits), §8 (Threats to validity), and §9 (Definitions) without documentation. Only §4, §6, and §7 are restored in this pass, per the Day 3 baseline-resolution review's explicit scope — §3.5/§8/§9 remain missing. Flagged here as a known, open gap, not silently reintroduced and not silently left unmentioned. See `CHANGELOG.md`'s `eval-spec-v1.3` entry.
 
 ---
 

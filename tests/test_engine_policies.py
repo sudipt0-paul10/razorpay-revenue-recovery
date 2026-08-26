@@ -1,6 +1,16 @@
 """Day 2 Stage 3, test items 3, 14, 15, 16: same latent world across arms,
 A0's exact (empty) policy, A2's exact schedule, and invoice-recovery /
 subscription-rescue staying separate outcomes.
+
+Day 3 evaluation cleanup (2026-08-27): most of this file still pins
+A2-original (`rrx.sim.engine.a2_action_for_day`, frozen and untouched
+under `sim-v1`) - e.g. `insufficient_funds`, `ambiguous_decline`, the
+cancelled/risk-check exclusions, the 3-contact cap, and the §5.2
+insufficient_funds gate check are all unchanged and still exercise
+A2-original directly. Only the three tests naming card-broken,
+`bank_technical_error`, and `transaction_limit_exceeded` schedules are
+updated to pin the ADOPTED schedule instead - see the comment directly
+above `test_a2_card_broken_bucket_schedule`.
 """
 
 from __future__ import annotations
@@ -9,6 +19,7 @@ import inspect
 
 import pytest
 
+from rrx.baselines.a2_variants import a2_strengthened_action_for_day
 from rrx.sim.engine import a0_action_for_day, a2_action_for_day, run_episode
 from rrx.sim.latent import load_configs
 
@@ -67,12 +78,29 @@ def test_a0_episodes_have_zero_contacts_regardless_of_outcome(configs):
 
 
 # -- item 15: A2 exact policy behavior ---------------------------------------
+#
+# Day 3 evaluation cleanup (2026-08-27): the three tests below are updated to
+# pin the ADOPTED A2 schedule (rrx.baselines.a2_variants.
+# a2_strengthened_action_for_day - EVAL.md §4.1.2), not A2-original
+# (rrx.sim.engine.a2_action_for_day, still frozen/untouched under sim-v1).
+# test_a2_transaction_limit_exceeded_schedule_keeps_fallback was renamed to
+# test_a2_transaction_limit_exceeded_schedule_fallback_removed (2026-08-27)
+# once its old name started describing the opposite of what it asserts; the
+# other two names still accurately describe their (unchanged) subject matter
+# and are kept as-is. A2-original's own exact schedule for all three
+# conditions remains separately pinned, unchanged, by
+# tests/test_a2_variants.py::test_a2_original_schedule_preserved_for_
+# transparency, so A2-original stays documented and runnable.
 
 def test_a2_card_broken_bucket_schedule():
+    """Adopted schedule (A2-strengthened): T+0/T+3/T+5, not A2-original's
+    T+0/T+5. T+3 is the T+5->T+3 validity correction (EVAL.md §4.1.1 item
+    1); T+5 is the separate post-halt rescue strengthening (EVAL.md
+    §4.1.2), restored as a third contact, not a replacement for T+3."""
     for key in ("card_expired", "debit_instrument_blocked", "card_not_enabled_group"):
         for day in range(0, 31):
-            action = a2_action_for_day(key, day, "pending")
-            if day in (0, 5):
+            action = a2_strengthened_action_for_day(key, day, "pending")
+            if day in (0, 3, 5):
                 assert action == "card_change"
             else:
                 assert action is None
@@ -90,12 +118,22 @@ def test_a2_insufficient_funds_schedule_has_no_fallback():
                 assert action is None
 
 
-def test_a2_transaction_limit_exceeded_schedule_keeps_fallback():
-    assert a2_action_for_day("transaction_limit_exceeded", 1, "pending") == "topup_reminder"
-    assert a2_action_for_day("transaction_limit_exceeded", 5, "pending") == "card_change"
-    assert a2_action_for_day("transaction_limit_exceeded", 5, "halted") == "card_change"
-    assert a2_action_for_day("transaction_limit_exceeded", 5, "active") is None
-    assert a2_action_for_day("transaction_limit_exceeded", 3, "pending") is None
+def test_a2_transaction_limit_exceeded_schedule_fallback_removed():
+    """Renamed from test_a2_transaction_limit_exceeded_schedule_keeps_
+    fallback (2026-08-27) - the old name described A2-original's T+5
+    card-change fallback, which the adopted schedule below no longer has.
+    EVAL.md §5.2's remedy-match gate is widened (EVAL.md §4.1.1 item 3) to
+    cover transaction_limit_exceeded exactly like insufficient_funds,
+    since card_chargeable=True at opening makes card-change an equally
+    guaranteed no-op for both. The T+5 card-change fallback is REMOVED -
+    only the T+1 top-up reminder remains."""
+    for day in range(0, 31):
+        for state in ("pending", "halted", "active"):
+            action = a2_strengthened_action_for_day("transaction_limit_exceeded", day, state)
+            if day == 1:
+                assert action == "topup_reminder"
+            else:
+                assert action is None
 
 
 def test_a2_ambiguous_decline_schedule():
@@ -105,9 +143,17 @@ def test_a2_ambiguous_decline_schedule():
 
 
 def test_a2_bank_technical_error_schedule_no_contact_before_t3():
+    """The T+5 contact now carries the restored 'if still pending/halted'
+    guard (EVAL.md §4.1.1 item 2) - a contact fires at T+5 only if the
+    condition has not already auto-resolved. It always has by day 2 for
+    this condition (episode.yaml's bank_technical_error_clearance support
+    is [0, 2]), so the guarded version never actually fires in practice -
+    that is the point of the fix (dev diagnostic: 51/51 A0 episodes for
+    this condition already recover with zero contact)."""
     for day in range(0, 5):
-        assert a2_action_for_day("bank_technical_error", day, "pending") is None
-    assert a2_action_for_day("bank_technical_error", 5, "pending") == "card_change"
+        assert a2_strengthened_action_for_day("bank_technical_error", day, "pending") is None
+    assert a2_strengthened_action_for_day("bank_technical_error", 5, "pending") == "card_change"
+    assert a2_strengthened_action_for_day("bank_technical_error", 5, "active") is None
 
 
 def test_a2_no_contact_for_cancelled_or_risk_check_failed():
