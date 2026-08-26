@@ -98,7 +98,9 @@ def test_sweep_runs_on_dev_only():
 def test_policies_frozen_across_cells():
     """Locked decision 14. Per-cell retuning of A3 would invalidate the
     entire sensitivity analysis."""
-    assert set(reg.sweep["frozen_policies"]) == {"A2", "A3"}
+    # eval-spec-v1.4: "A3" split into its two pre-registered named arms
+    # (EVAL.md §4.2) -- propagated, not relaxed: pins three names now.
+    assert set(reg.sweep["frozen_policies"]) == {"A2", "A3-D", "A3-LLM"}
 
 
 def test_crn_uses_per_variable_substreams():
