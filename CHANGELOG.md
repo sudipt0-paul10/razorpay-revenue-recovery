@@ -1,5 +1,230 @@
 # Changelog
 
+## Day 2 Stage 3 — 2026-08-26
+
+Thin end-to-end simulator: cohort generator, clock/retry engine,
+action-effect resolver, A0, A2, and the first reproducible A0-vs-A2 result.
+No A3, no manifest, no holdout, no Razorpay integration - out of scope per
+this stage's brief.
+
+### Discovered defect, fixed (authorized): `blocked_until` default
+
+`src/rrx/sim/latent.py::draw_latent_state` defaulted `blocked_until` to
+`BLOCKED_INDEFINITELY` (`math.inf`) unconditionally, overriding it only for
+`bank_technical_error`. Since SIM.md §4's retry AND-gate requires
+`t >= blocked_until` for every condition, this silently made auto-retry
+success impossible for `insufficient_funds`, `ambiguous_decline`,
+`card_expired`, `debit_instrument_blocked`, and `card_not_enabled_group` -
+91% of the population - regardless of `card_chargeable`/
+`funds_available_from`. This contradicted SIM.md §3's explicit claim that
+transient-mode `insufficient_funds` customers recover "with no agent
+action," and SIM.md's own "Discovered semantic clarification" scopes the
+indefinite-block reading of "never" to `transaction_limit_exceeded` /
+`payment_risk_check_failed` only. Confirmed empirically before the fix: a
+2000-episode A0 dev run recovered invoices only via `bank_technical_error`
+(51/51), zero via `insufficient_funds`.
+
+Fix (authorized by user decision, 2026-08-26): default changed to `0.0`
+(non-blocking); `transaction_limit_exceeded`/`payment_risk_check_failed`
+now set `BLOCKED_INDEFINITELY` explicitly. Updated the three locked-behavior
+assertions in `tests/test_latent_sampling.py` and re-pinned the four
+affected cases in `tests/test_latent_snapshot.py` (the snapshot correctly
+failed on this change - exactly what it exists to catch; only `blocked_until`
+moved, every other pinned field is unchanged).
+
+### Three model clarifications - applied to SIM.md (Day 2 Stage 3 final closing pass, 2026-08-26)
+
+Recorded directly in `SIM.md` (§2, §4, §5) in this pass, labeled "Model
+ruling" with the date, per CLAUDE.md's locked-file rule (edits authorized by
+explicit user instruction). Earlier revisions of this changelog entry and of
+`engine.py`'s docstrings described these as "approved 2026-08-26" while
+still unrecorded in SIM.md; that was inaccurate and was corrected before
+this pass ever labeled anything "approved" prematurely again.
+
+- **Within-day ordering (SIM.md §4).** A message sent and engaged with on
+  day t changes physical state before that day's end-of-day retry reads it.
+  Implemented in `rrx.sim.engine._send_message` / `run_episode`'s day loop:
+  contacts/emails scheduled for day t are resolved before day t's retry
+  check.
+- **`blocked_until` "never" (SIM.md §2).** Non-blocking (`0.0`) for every
+  row except `transaction_limit_exceeded`/`payment_risk_check_failed`,
+  which receive the indefinite-block value explicitly. See the "Discovered
+  defect" entry below - this is the specification-level record of that
+  fix.
+- **Post-halt card rescue, narrower form (SIM.md §5).** Only episodes whose
+  `card_chargeable` was `false` AT OPENING may be rescued post-halt when
+  `card_chargeable` becomes `true`. Episodes already `card_chargeable =
+  true` at opening (`insufficient_funds`, `transaction_limit_exceeded`,
+  `payment_risk_check_failed`) never transition to `active` merely because
+  a post-halt message occurs.
+
+  **Why this rule exists - discovered implementation bug it fixes:** the
+  ORIGINAL (broader) rule as first implemented tested the CURRENT value of
+  `card_chargeable` at the end of every post-halt message, not whether that
+  message caused a false→true TRANSITION. Since `insufficient_funds`/
+  `transaction_limit_exceeded`/`payment_risk_check_failed` all have
+  `card_chargeable = true` from T=0 (SIM.md §2), this meant the halt-
+  transition automatic email alone flipped `subscription_state` to
+  `"active"` unconditionally the instant it was sent, with no engagement
+  required. Confirmed empirically before the fix: of 2000 dev episodes,
+  every single non-recovered `insufficient_funds` (195/195), `transaction_
+  limit_exceeded` (23/23), and `payment_risk_check_failed` (21/21) episode
+  was reported as rescued (100%). Card-broken/ambiguous-decline buckets
+  were unaffected in practice, because for those, `card_chargeable`
+  becoming true pre-halt would already have recovered the invoice on the
+  next retry day, so halting with `card_chargeable` already true could only
+  happen via the very message being evaluated.
+
+  **Fixed:** `_EpisodeState` now records `card_chargeable_at_opening` once,
+  at construction, and `_send_message`'s rescue check requires it to be
+  `False`. Re-ran the 2000-episode dev smoke after the fix: of the same
+  195/23/21 non-recovered episodes, 0/0/0 are now reported as rescued -
+  confirming the fix is genuinely connected to the runtime path, not merely
+  documented. A0/A2 subscription rescue rate dropped from 0.5850/0.6850 to
+  0.4055/0.5180; invoice recovery rate (0.3525/0.4485) is unchanged, as
+  expected - this fix only ever touches `subscription_rescued`.
+
+### A2 policy verified against the repository, not memory (Day 2 Stage 3 final closing pass, 2026-08-26)
+
+Searched `EVAL.md`, `SIM.md`, `configs/`, and the whole repository for any
+written A2 reference-policy schedule. Finding: **none exists.** `EVAL.md`
+has no `## 4.` heading (confirmed again by listing every `##`/`###`
+heading - the file jumps `## 3. Population` -> `## 5. Metrics`). `SIM.md`
+defines world mechanics only and never prescribes agent policy. No
+policy/reference-policy file exists anywhere in `configs/` or the repo
+(confirmed by search - the only files matching "reference policy"/"a2
+policy" are this changelog and `engine.py` itself). `EVAL.md §3.2`'s table
+states `insufficient_funds`'s remedy as "Top-up reminder **before** retries
+exhaust" with no mention of any card-change fallback, at T+5 or otherwise.
+No occurrence of the string "T+5" exists in `EVAL.md` or `SIM.md` at all.
+
+**Conclusion: the entire A2 day-offset schedule in `rrx.sim.engine.
+a2_action_for_day` - including every T+0/T+1/T+5/T+7 in it - was dictated
+directly in conversation and has no other source.** It was never copied
+from EVAL.md; describing it as "EVAL.md §4's reference policy" (as an
+earlier turn did) does not resolve to real text in the file. This is not a
+new finding this pass invented - it restates and confirms what the Stage 3
+audit already established about `§4` not existing - but this pass
+additionally confirms there is no T+5-for-`insufficient_funds` rule
+anywhere in the written spec to have a discrepancy against: the current
+code (no fallback for `insufficient_funds`, ever) matches the *absence* of
+any such written rule, and separately matches `EVAL.md §5.2`'s actual,
+real, written gate ("Card-change prompts for `insufficient_funds`: 0",
+`test_gate_remedy_match.py`, which does not exist yet as a file). The
+previously-written "`EVAL.md §5.2` supersedes `§4`" framing is dropped -
+there is no `§4` for anything to supersede. `engine.py`'s
+`a2_action_for_day` docstring has been corrected accordingly.
+
+### New simulator modules
+
+- `src/rrx/sim/rng.py`: `rng_for_child_stream` - extends the frozen
+  per-variable substream isolation to per-message/per-engagement draws via
+  `seed_for_substream`'s existing hash (`"<root>:<child>"`), without a ninth
+  top-level substream and without modifying `latent.py`'s frozen
+  `SUBSTREAM_NAMES`/`rng_for_substream`.
+- `src/rrx/sim/cohort.py`: opening-condition selection (from the
+  authoritative `population.yaml#/failure_mix/conditions`, via a
+  `failure_condition:opening_condition_select` child stream kept independent
+  of the existing ambiguous-cause Bernoulli) and invoice-amount sampling
+  (first real use of the `invoice_amount` substream; authority resolved by
+  the same `owner_path` convention that resolved failure-mix -
+  `tests/test_invoice_amount_representations_agree.py` confirms
+  `population.yaml`/`episode.yaml`'s two invoice representations agree at
+  baseline).
+- `src/rrx/sim/engine.py`: the clock, retry AND-gate, action-effect
+  resolver (card-naming, dues-naming/top-up), A0 (no contact, ever) and A2
+  (EVAL.md §5.2-compliant reference policy - `insufficient_funds` gets only
+  a T+1 top-up, never a card-change fallback, so the "0 card-change prompts
+  for insufficient_funds" gate holds by construction).
+- `src/rrx/sim/run_stage3.py`: batch A0/A2 run (dev, 2000 episodes, seeds
+  1000-2999) plus paired bootstrap 95% CI (reusing
+  `model_params.yaml#/sweep/win_criterion`'s existing convention, not a new
+  statistical framework). Prints to stdout only - no manifest, no results
+  directory.
+
+### Tests
+
+`tests/test_cohort.py`, `test_engine_mechanics.py`, `test_engine_policies.py`,
+`test_topup_crn.py`, `test_stage3_run.py`,
+`test_invoice_amount_representations_agree.py` (new);
+`test_failure_mix_representations_agree.py` now imports its key-mapping from
+`rrx.sim.cohort` instead of a duplicated local copy.
+
+### Regime A cancellation - not implemented (scope exclusion, not a gap to silently fill)
+
+No cancellation-hazard mechanism exists anywhere in `rrx.sim.engine` -
+nothing reads `episode_cfg["latent"]["cancellation"]`, no hazard draw, no
+LTV computation. This was an explicit, stated Stage 3 scope exclusion (the
+10-item SIMULATOR SCOPE list has no cancellation/Regime A item), not
+something dropped silently. Consequence: there is no runtime "Regime A
+cancellation cannot occur in Regime B" gate to test, because there is no
+Regime A mechanism for such a gate to guard. Any claim that Stage 3
+validates Regime A/Regime B cancellation-gating behavior would be false -
+Stage 3 validates nothing about cancellation, in either direction, and no
+test in this stage's suite asserts otherwise. This must be built as real
+work in a later stage, not invented to make a test pass.
+
+### Stage 3 closing pass — 2026-08-26
+
+- Added `test_no_retry_evaluated_after_halt_even_if_and_gate_would_pass`
+  (`tests/test_engine_mechanics.py`): monkeypatches `draw_latent_state`/
+  `sample_cohort_episode` to force a state that provably satisfies the full
+  retry AND-gate on a post-halt day, and confirms `invoice_recovered`
+  stays `False` - closing the coverage gap flagged in the Stage 3 audit
+  (previously only a statistical, black-box observation existed).
+- Added `test_run_episode_full_replay_is_byte_identical`
+  (`tests/test_engine_mechanics.py`): calls `run_episode()` twice with
+  identical inputs across both arms and 120 episode indices, asserting full
+  `EpisodeResult` equality - exercises the engine's own engagement/
+  completion/topup RNG consumption, not just cohort/latent determinism -
+  closing the other coverage gap flagged in the audit.
+- Added a `payment_risk_check_failed` case to
+  `tests/test_latent_snapshot.py`, pinning `blocked_until ==
+  BLOCKED_INDEFINITELY` for it. The blocked_until defect fix's `elif key in
+  ("transaction_limit_exceeded", "payment_risk_check_failed")` branch
+  previously had only `transaction_limit_exceeded` pinned by a snapshot
+  case; a future edit dropping `payment_risk_check_failed` from that tuple
+  would have passed every existing snapshot test.
+- Corrected "approved 2026-08-26" language in `engine.py`'s module
+  docstring and `a2_action_for_day`'s docstring, and "frozen rulings" in
+  `test_engine_mechanics.py`'s docstring, to accurately describe both
+  rulings as proposed/pending - neither has been approved or written into
+  SIM.md.
+- `src/rrx/sim/run_stage3.py`: renamed the printed/reported metric labels
+  "wasted attempts" → `no_op_contacts` and "hard-decline retry rate" →
+  `remedy_mismatch_rate`, since there are no agent-controlled payment-retry
+  attempts in this model (Razorpay's auto-retry is the only retry mechanism,
+  and the agent has no retry action at all - EVAL.md §1.1/§1.2) and
+  describing a mismatched contact as a "retry attempt" or "hard decline
+  retry" mischaracterizes what it actually is (a contact whose content
+  didn't change physical state). Underlying calculations unchanged; only
+  the local variable names and printed labels moved.
+
+### Final closing pass — narrower rescue implemented, SIM.md updated (2026-08-26)
+
+- Implemented the narrower post-halt rescue rule in `rrx.sim.engine`
+  (`_EpisodeState.card_chargeable_at_opening`, gated check in
+  `_send_message`) - see above.
+- Added `test_a_card_broken_at_open_episode_can_be_post_halt_rescued`,
+  `test_b_already_chargeable_at_open_episode_cannot_be_post_halt_rescued`,
+  and `test_insufficient_funds_and_kin_structurally_cannot_be_post_halt_
+  rescued` to `tests/test_engine_mechanics.py`.
+- Applied all three model clarifications to `SIM.md` (§2, §4, §5), labeled
+  "Model ruling (2026-08-26, Day 2 Stage 3 closing)" - see above.
+- Verified the A2 policy against the actual repository contents (see above)
+  and corrected `engine.py`'s docstrings accordingly.
+- Re-ran the 2000-episode dev smoke; numbers reported in the Stage 3 final
+  closing report (not reproduced here to avoid a second source of truth for
+  a non-formal smoke run).
+
+### Verification
+
+- `python -m pytest -q`: 515 passed.
+- `python -m ruff check .`: all checks passed.
+- No frozen spec file modified except the three authorized `SIM.md`
+  clarifications recorded above; `EVAL.md`, all of `configs/`, and
+  `data/decline_codes.yaml` remain untouched.
+
 ## Day 2 Stage 2 — 2026-08-26
 
 Sweep-cell materialization and a reproducibility control. No agent, clock,

@@ -238,9 +238,27 @@ def draw_latent_state(
     )
 
     # SIM.md §2: "Unless stated otherwise, mandate_alive = TRUE and
-    # blocked_until = never at T=0 for all rows except cancelled."
+    # blocked_until = never at T=0 for all rows except cancelled." SIM.md's
+    # own "Discovered semantic clarification" scopes the indefinite-block
+    # (BLOCKED_INDEFINITELY) reading of "never" to transaction_limit_exceeded
+    # and payment_risk_check_failed ONLY - for every other row, "no block"
+    # must default to non-blocking (0.0), or SIM.md §4's t >= blocked_until
+    # gate could never be satisfied for those rows regardless of
+    # card_chargeable/funds_available_from, contradicting SIM.md §3's
+    # explicit statement that transient-mode insufficient_funds customers
+    # recover "with no agent action" inside T+1...T+3.
+    #
+    # DEFECT FIX (2026-08-26, discovered building Day 2 Stage 3): this
+    # default was previously BLOCKED_INDEFINITELY unconditionally, which
+    # silently blocked auto-retry success for insufficient_funds,
+    # ambiguous_decline, and all three card-broken keys - 91% of the
+    # population - regardless of any other state. Confirmed empirically: a
+    # 2000-episode A0 dev run recovered invoices ONLY via
+    # bank_technical_error (51/51), zero via insufficient_funds. The two
+    # rows the clarification actually names now set BLOCKED_INDEFINITELY
+    # explicitly, below.
     mandate_alive = True
-    blocked_until = BLOCKED_INDEFINITELY
+    blocked_until = 0.0
 
     key = condition["key"]
 
@@ -284,8 +302,12 @@ def draw_latent_state(
             blocked_until = _sample_bank_technical_error_clearance(
                 rng_for_substream(split, i, "balance_restore", master_seed), episode_cfg
             )
-        # transaction_limit_exceeded, payment_risk_check_failed: blocked_until
-        # stays at the BLOCKED_INDEFINITELY default set above.
+        elif key in ("transaction_limit_exceeded", "payment_risk_check_failed"):
+            # SIM.md's "Discovered semantic clarification": for these two
+            # rows only, "never" means blocked_until is set beyond every
+            # auto-retry day, so §4's t >= blocked_until gate can never be
+            # satisfied for them within the episode.
+            blocked_until = BLOCKED_INDEFINITELY
 
     else:
         raise KeyError(f"opening condition {key!r} has no SIM.md §2 mapping")

@@ -190,7 +190,11 @@ def test_card_broken_rows_match_sim_md(configs, key):
     assert state.card_chargeable is False
     assert state.funds_available_from == 0.0
     assert state.mandate_alive is True
-    assert state.blocked_until == BLOCKED_INDEFINITELY
+    # Discovered-defect fix, 2026-08-26: "never" (no transient block) is
+    # non-blocking (0.0), not BLOCKED_INDEFINITELY - SIM.md's own semantic
+    # clarification scopes indefinite-block to transaction_limit_exceeded /
+    # payment_risk_check_failed only. See test_never_blocked_rows_match_sim_md.
+    assert state.blocked_until == 0.0
 
 
 def test_insufficient_funds_matches_sim_md(configs):
@@ -202,7 +206,8 @@ def test_insufficient_funds_matches_sim_md(configs):
     assert state.funds_available_from >= 0.0
     assert math.isfinite(state.funds_available_from)
     assert state.mandate_alive is True
-    assert state.blocked_until == BLOCKED_INDEFINITELY
+    # Discovered-defect fix, 2026-08-26: see test_card_broken_rows_match_sim_md.
+    assert state.blocked_until == 0.0
 
 
 def test_ambiguous_decline_bernoulli_rate_matches_p_card_cause(configs):
@@ -224,7 +229,8 @@ def test_ambiguous_decline_bernoulli_rate_matches_p_card_cause(configs):
         if not o.card_chargeable:
             assert o.funds_available_from == 0.0
         assert o.mandate_alive is True
-        assert o.blocked_until == BLOCKED_INDEFINITELY
+        # Discovered-defect fix, 2026-08-26: see test_card_broken_rows_match_sim_md.
+        assert o.blocked_until == 0.0
 
 
 def test_cancelled_matches_sim_md(configs):

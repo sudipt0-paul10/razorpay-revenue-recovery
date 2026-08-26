@@ -76,6 +76,24 @@ and `payment_risk_check_failed`, "never" means `blocked_until` is set beyond
 every auto-retry day (T+1…T+3), so `§4`'s `t >= blocked_until` gate can never
 be satisfied for these two conditions within the episode.
 
+**Model ruling (2026-08-26, Day 2 Stage 3 closing): meaning of "never" for
+every other row.** For every row covered by the "unless stated otherwise"
+default ABOVE, EXCEPT `transaction_limit_exceeded` and
+`payment_risk_check_failed`, `blocked_until = never` means **non-blocking**
+(`0.0`) - `§4`'s `t >= blocked_until` term is trivially satisfied, because
+these rows have no transient issuer/risk block to begin with; `blocked_
+until` is simply not their bottleneck. Discovered as a defect during Day 2
+Stage 3 implementation: an unconditional `BLOCKED_INDEFINITELY` default in
+`rrx.sim.latent.draw_latent_state` silently made `§4`'s AND-gate
+unsatisfiable for `insufficient_funds`, `ambiguous_decline`, and every
+card-broken row - 91% of the population - regardless of `card_chargeable`/
+`funds_available_from`, contradicting this document's own §3 statement that
+transient-mode `insufficient_funds` customers recover "with no agent
+action." Fixed in `latent.py`; `blocked_until` now defaults to `0.0`, with
+`transaction_limit_exceeded`/`payment_risk_check_failed` set to
+`BLOCKED_INDEFINITELY` explicitly, matching the clarification directly
+above.
+
 ---
 
 ## §3. Actions → physical state, via message CONTENT, never via correctness
@@ -172,6 +190,19 @@ AND t >= blocked_until
 ```
 
 - First success ends the episode.
+
+**Model ruling (2026-08-26, Day 2 Stage 3 closing): within-day ordering.**
+This document did not previously state whether a message sent and engaged
+with on day t changes physical state in time for day t's OWN retry check,
+or only day t+1's. Resolved: an engaged message on day t changes physical
+state immediately, and that change is visible to that same day's end-of-day
+retry - not only to the next day's. Engagement is continuous-time (§3's
+`t_engage`); the retry schedule above is day-granular. Fatigue and
+contact-budget accounting are unaffected by this ordering. Implemented in
+`rrx.sim.engine._send_message`/`run_episode`: any contact/email scheduled
+for day t is resolved and its effects applied before that day's retry check
+runs.
+
 - After T+3 the subscription is halted (`episode.yaml#/razorpay_retry_engine/state_after_exhaustion`)
   and **no further auto-retry fires**. Funds arriving after halt do nothing on
   their own — per `EVAL.md §1.3`, previous charges are not re-attempted after
@@ -199,8 +230,35 @@ AND t >= blocked_until
   failed invoice is recovered. Subscription rescue remains available across
   the full 30-day window via card change.
 - **Subscription rescue:** subscription state is `active` at T+30.
+
+**Model ruling (2026-08-26, Day 2 Stage 3 closing): post-halt card rescue,
+narrower form.** This document did not previously state what mechanism
+transitions a `halted` subscription to `active`, or when. Resolved, with a
+restriction narrower than this project initially ran with (see the Stage 3
+closing report for the discovered implementation mismatch this corrects):
+only episodes whose `card_chargeable` was `false` at opening (§2) may be
+rescued post-halt when `card_chargeable` becomes `true`. Episodes already
+`card_chargeable = true` at opening - `insufficient_funds`,
+`transaction_limit_exceeded`, and `payment_risk_check_failed` - do **not**
+transition to `active` merely because `card_chargeable` is (still) `true`
+after halt; nothing in this simulator rescues their subscription post-halt.
+This restriction is a model clarification, not forced by any single
+existing sentence in this document or in `episode.yaml`: the only direct
+evidence is `episode.yaml#/payment_method_change_effect/while_halted`
+naming `subscription_rescued` as a reachable outcome (with
+`manual_charge_required: true` / `manual_charge_available_domestic_card:
+false` - the failed invoice itself is never recoverable post-halt), which
+says nothing about which conditions are eligible or what event triggers it.
+The at-opening restriction is added here to give "rescue" a coherent
+meaning (a card that was genuinely broken getting fixed) rather than
+crediting a message with fixing something that was never broken.
+Implemented in `rrx.sim.engine._EpisodeState.card_chargeable_at_opening`
+and the corresponding check in `_send_message`.
+
 - **Regime A cancellation hazard** lives in a separate resolver that is never
-  invoked under Regime B.
+  invoked under Regime B. **Not implemented as of Day 2 Stage 3** - no
+  cancellation-hazard mechanism exists in `rrx.sim.engine` yet; this
+  section describes a future resolver, not current runtime behavior.
 
 ---
 

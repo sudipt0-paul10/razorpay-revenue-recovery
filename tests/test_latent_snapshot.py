@@ -15,6 +15,22 @@ a loud, specific failure.
 Recorded 2026-08-26 against numpy 2.5.2, from the frozen configs/episode.yaml
 and configs/population.yaml (eval-spec-v1.1), via
 rrx.sim.latent.draw_latent_state.
+
+Re-pinned 2026-08-26 (Day 2 Stage 3): the discovered blocked_until defect fix
+in rrx.sim.latent.draw_latent_state (default changed from BLOCKED_INDEFINITELY
+to 0.0 for every row except transaction_limit_exceeded/payment_risk_check_
+failed - see latent.py's inline comment) deliberately changes blocked_until
+for insufficient_funds, ambiguous_decline, card_expired, and
+subscription_cancelled_by_customer. This is exactly the kind of deliberate,
+reviewed change this snapshot exists to make visible - only blocked_until
+moves for those four cases; every other pinned field is unchanged.
+
+Extended 2026-08-26 (Stage 3 closing): added a payment_risk_check_failed
+case. Without it, the fix's `elif key in ("transaction_limit_exceeded",
+"payment_risk_check_failed"): blocked_until = BLOCKED_INDEFINITELY` branch
+had only transaction_limit_exceeded pinned - a future edit that dropped
+payment_risk_check_failed from that tuple (silently reverting it to the new
+non-blocking 0.0 default) would have passed every existing snapshot case.
 """
 
 from __future__ import annotations
@@ -42,6 +58,7 @@ CASES = [
     ("dev", 0, "card_expired"),
     ("dev", 0, "subscription_cancelled_by_customer"),
     ("dev", 42, "transaction_limit_exceeded"),
+    ("dev", 3, "payment_risk_check_failed"),
 ]
 
 EXPECTED = {
@@ -49,7 +66,7 @@ EXPECTED = {
         card_chargeable=True,
         funds_available_from=1.6536396778130673,
         mandate_alive=True,
-        blocked_until=math.inf,
+        blocked_until=0.0,
         channel_response_trait=0.22447021524047975,
         card_change_completion_propensity=0.7752548930132623,
     ),
@@ -57,7 +74,7 @@ EXPECTED = {
         card_chargeable=True,
         funds_available_from=2.5261980692690233,
         mandate_alive=True,
-        blocked_until=math.inf,
+        blocked_until=0.0,
         channel_response_trait=0.1038889585360483,
         card_change_completion_propensity=0.20105177132455626,
     ),
@@ -73,7 +90,7 @@ EXPECTED = {
         card_chargeable=False,
         funds_available_from=0.0,
         mandate_alive=True,
-        blocked_until=math.inf,
+        blocked_until=0.0,
         channel_response_trait=0.22447021524047975,
         card_change_completion_propensity=0.7752548930132623,
     ),
@@ -81,7 +98,7 @@ EXPECTED = {
         card_chargeable=True,
         funds_available_from=0.0,
         mandate_alive=False,
-        blocked_until=math.inf,
+        blocked_until=0.0,
         channel_response_trait=0.22447021524047975,
         card_change_completion_propensity=0.7752548930132623,
     ),
@@ -92,6 +109,14 @@ EXPECTED = {
         blocked_until=math.inf,
         channel_response_trait=0.38915305166384123,
         card_change_completion_propensity=0.6728599492796269,
+    ),
+    ("dev", 3, "payment_risk_check_failed"): dict(
+        card_chargeable=True,
+        funds_available_from=0.0,
+        mandate_alive=True,
+        blocked_until=math.inf,
+        channel_response_trait=0.23317590755004153,
+        card_change_completion_propensity=0.3212817101033693,
     ),
 }
 
@@ -145,7 +170,7 @@ RESOLVED_EXPECTED = dict(
     card_chargeable=True,
     funds_available_from=1.6536396778130673,
     mandate_alive=True,
-    blocked_until=math.inf,
+    blocked_until=0.0,
     channel_response_trait=0.29672285249034863,
     card_change_completion_propensity=0.7752548930132623,
 )
