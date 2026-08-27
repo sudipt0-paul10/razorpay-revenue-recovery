@@ -32,21 +32,24 @@ Day-loop contract, per day D (docs/A3-DESIGN.md §3):
      step 4.
   3. Wake-up determination (§5) - tick_type classification.
   4. Policy invocation - only on a real wakeup tick.
-  5. Gate (§8) - no-op stub in this pass (src/rrx/agent/gate.py).
+  5. Gate (§8) - real R1-R8 evaluation (src/rrx/agent/gate.py).
   6. Executor (§9) - CONTACT maps to _send_message; WAIT/STOP/rejected:
      no state mutation beyond STOP's own runner-level flag.
   7. Retry check - identical to engine.py's own retry-day handling.
   8. Halt check + halt auto-email - identical to engine.py's own.
-  9. Ledger record (§14) - no-op stub in this pass
-     (src/rrx/agent/ledger.py).
+  9. Ledger record (§14) - real 22-field record
+     (src/rrx/agent/ledger.py). Both gate and ledger are pure functions
+     (no mutation of `state`/`view`/`proposal`) - wiring them in changes
+     nothing about the mutating steps 1/6/7/8, which is what
+     tests/test_a3_runner_parity.py depends on.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
-from rrx.agent.gate import GateVerdict, no_op_gate
-from rrx.agent.ledger import no_op_ledger_record
+from rrx.agent.gate import GateVerdict, evaluate_gate
+from rrx.agent.ledger import default_ledger_record
 from rrx.agent.proposal import Proposal
 from rrx.features.episode_view import EpisodeView
 from rrx.sim.cohort import sample_cohort_episode
@@ -80,8 +83,8 @@ TICK_BUDGET_EXHAUSTED = "budget_exhausted"
 TICK_TERMINAL_SUPPRESSED = "terminal_suppressed"
 
 PolicyFn = Callable[[EpisodeView], Proposal]
-GateFn = Callable[[Proposal, EpisodeView], GateVerdict]
-LedgerFn = Callable[..., None]
+GateFn = Callable[..., GateVerdict]
+LedgerFn = Callable[..., Any]
 
 
 def run_episode_a3(
@@ -92,8 +95,8 @@ def run_episode_a3(
     population_cfg: dict[str, Any],
     master_seed: int = MASTER_SEED,
     capture_view_at_day: int | None = None,
-    gate: GateFn = no_op_gate,
-    ledger_record: LedgerFn = no_op_ledger_record,
+    gate: GateFn = evaluate_gate,
+    ledger_record: LedgerFn = default_ledger_record,
 ) -> EpisodeResult | tuple[EpisodeResult, EpisodeView | None]:
     """Simulate one episode under the A3 runner, driven by an injected
     `policy` callable (docs/A3-DESIGN.md §3).
@@ -101,9 +104,8 @@ def run_episode_a3(
     Mirrors rrx.sim.engine.run_episode()'s parameter shape (split, i,
     <policy selector>, episode_cfg, population_cfg, master_seed,
     capture_view_at_day) with `policy` an injected callable in place of
-    an arm-name string lookup. `gate`/`ledger_record` default to the
-    no-op stubs (src/rrx/agent/gate.py, ledger.py) - real §8/§14 logic is
-    future work, not this pass.
+    an arm-name string lookup. `gate`/`ledger_record` default to the real
+    §8/§14 implementations (src/rrx/agent/gate.py, ledger.py).
 
     The cohort draw and the latent-state draw take no input from
     `policy`/`gate`/`ledger_record` - identical CRN to run_episode(),
@@ -121,13 +123,15 @@ def run_episode_a3(
     if condition["kind"] == "subscription_state":
         # subscription_cancelled_by_customer: terminal at open, before any
         # day-loop iteration - identical early return to run_episode().
-        # No runner tick, no wakeup, no policy invocation at all (§7, §20).
+        # No runner tick, no wakeup, no policy invocation, no ledger
+        # record at all (§7, §20).
         result = _finalize(cohort, state)
         return (result, None) if capture_view_at_day is not None else result
 
     retry_days = episode_cfg["razorpay_retry_engine"]["card_schedule_days"]
     halt_boundary_day = episode_cfg["payment_method_change_effect"]["halt_boundary_day"]
     window_days = episode_cfg["episode"]["window_days"]
+    max_contacts = episode_cfg["agent_budget"]["max_contacts_per_episode"]
 
     halted = False
     episode_stopped = False  # §6 STOP semantics: forgoes remaining budget only
@@ -148,6 +152,7 @@ def run_episode_a3(
 
         # --- step 2: EpisodeView construction, before the decision ---
         view = build_episode_view(cohort, state, day, episode_cfg, split, i)
+        budget_before = view.budget_remaining
 
         # --- step 3: wake-up determination ---
         new_engagement_since_last_wake = any(
@@ -166,32 +171,44 @@ def run_episode_a3(
 
         proposal: Proposal | None = None
         gate_verdict: GateVerdict | None = None
+        executed_action: dict[str, str] | None = None
+        contact_sent_this_tick = False
 
         if tick_type == TICK_WAKEUP:
             last_wake_history_len = len(view.contact_history)
             # --- step 4: policy invocation, only on a real wakeup tick ---
             proposal = policy(view)
-            # --- step 5: gate ---
+            # --- step 5: gate (§8's R1-R8, real precedence-ordered check) ---
             gate_verdict = gate(proposal, view)
 
-        # --- step 6: executor ---
-        if tick_type == TICK_WAKEUP and gate_verdict is not None and gate_verdict.accepted:
-            if proposal.action_type == "CONTACT":
-                if proposal.remedy == "card_change":
-                    _send_message(
-                        state, day=day, channel=AGENT_CHANNEL, names_card=True, names_dues=False,
-                        is_agent_contact=True, **send_kwargs,
-                    )
-                    if cohort.opening_condition_key == "insufficient_funds":
-                        state.card_change_sent_for_insufficient_funds = True
-                elif proposal.remedy == "topup_reminder":
-                    _send_message(
-                        state, day=day, channel=AGENT_CHANNEL, names_card=False, names_dues=True,
-                        is_agent_contact=True, **send_kwargs,
-                    )
-            elif proposal.action_type == "STOP":
+            # --- step 6: executor ---
+            if gate_verdict.accepted and proposal.action_type == "CONTACT" and (
+                proposal.remedy == "card_change"
+            ):
+                _send_message(
+                    state, day=day, channel=AGENT_CHANNEL, names_card=True, names_dues=False,
+                    is_agent_contact=True, **send_kwargs,
+                )
+                if cohort.opening_condition_key == "insufficient_funds":
+                    state.card_change_sent_for_insufficient_funds = True
+                contact_sent_this_tick = True
+                executed_action = {"action_type": "CONTACT", "remedy": "card_change"}
+            elif gate_verdict.accepted and proposal.action_type == "CONTACT" and (
+                proposal.remedy == "topup_reminder"
+            ):
+                _send_message(
+                    state, day=day, channel=AGENT_CHANNEL, names_card=False, names_dues=True,
+                    is_agent_contact=True, **send_kwargs,
+                )
+                contact_sent_this_tick = True
+                executed_action = {"action_type": "CONTACT", "remedy": "topup_reminder"}
+            elif gate_verdict.accepted and proposal.action_type == "STOP":
                 episode_stopped = True
-            # WAIT: no-op, ledger-only (§9).
+                executed_action = {"action_type": "STOP"}
+            else:
+                # WAIT, or a rejected/otherwise-unexecutable proposal: no
+                # state mutation (§3 step 6; §9's executor table).
+                executed_action = {"action_type": "WAIT"}
 
         # --- step 7: retry check - identical to engine.py:479-482 ---
         if day in retry_days and not state.invoice_recovered and not halted:
@@ -208,13 +225,19 @@ def run_episode_a3(
                 is_agent_contact=False, **send_kwargs,
             )
 
-        # --- step 9: ledger record - no-op stub in this pass ---
+        # --- step 9: ledger record (§14) - one per tick, structurally guaranteed ---
+        budget_after = max_contacts - state.contacts_sent
         ledger_record(
             episode_id=view.subscription_id,
             tick=day,
             tick_type=tick_type,
+            view=view,
             proposal=proposal,
             gate_verdict=gate_verdict,
+            executed_action=executed_action,
+            budget_before=budget_before,
+            budget_after=budget_after,
+            contact_sent=contact_sent_this_tick,
         )
 
         if capture_view_at_day is not None and day == capture_view_at_day:
