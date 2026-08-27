@@ -1,9 +1,12 @@
 # A3 Design — EpisodeView-Aware Runner, Gate, Executor, Ledger
 
 **Status:** Design freeze (eval-spec-v1.4), final pass — all open
-questions from the prior pass resolved (§21). Specification only — no
-implementation exists yet. Companion to `EVAL.md §4.2, §5.2-§5.4, §6A, §8
-items 7-8` and `SIM.md`. `src/rrx/sim/` is unmodified.
+questions from the prior pass resolved (§21). Amended at `eval-spec-v1.5`
+(§10A added — the A3-D decision-table pre-registration, plus the
+[D-1]/[CONSEQUENTIAL-1] corrections it required; see `CHANGELOG.md`).
+Specification only — no implementation exists yet. Companion to
+`EVAL.md §4.2, §5.2-§5.4, §6A, §8 items 7-8` and `SIM.md`. `src/rrx/sim/`
+is unmodified.
 
 ---
 
@@ -232,8 +235,24 @@ the planner again (§7).
 | `retry_window_open` | Waiting — an auto-retry may still resolve it | `WAIT` | `insufficient_funds`, `bank_technical_error`, `transaction_limit_exceeded` |
 | `post_halt_rescue` | Post-halt contact aimed at subscription rescue | `CONTACT(card_change)` | `card_expired`, `debit_instrument_blocked`, `card_not_enabled_group`, `ambiguous_decline` — **requires** `subscription_state == halted` (`SIM.md §5`'s at-opening `card_chargeable=False` restriction; not admissible for `bank_technical_error`, whose `card_chargeable=True` at opening per `SIM.md §2`) |
 | `engagement_observed` | Re-contacting — prior engagement seen this episode | `CONTACT` | any except `subscription_cancelled_by_customer` |
-| `no_engagement_restraint` | Withholding — low observed engagement this episode | `WAIT` | any except `subscription_cancelled_by_customer` |
+| `no_engagement_restraint` | Withholding or stopping — either low observed engagement this episode, or a condition under which `SIM.md §2`–§5 make every available action a mechanical no-op `[D-2, eval-spec-v1.5]` | `WAIT` | any except `subscription_cancelled_by_customer` |
 | `risk_flagged` | Escalation | `STOP` | `payment_risk_check_failed` only |
+
+`[D-2, eval-spec-v1.5]` **`no_engagement_restraint`'s meaning column widened.**
+Originally "Withholding — low observed engagement this episode" only.
+Routing the mechanically-dead conditions §10A.4 identifies (R-03, R-05,
+R-06, R-07) to `WAIT` instead of `STOP` would place environment-forced
+inaction in `wait_rate`'s numerator — the same error `EVAL.md §8` item 8
+already forbids for the cancelled-at-open bucket. The admissible
+`decline_code` set (any except `subscription_cancelled_by_customer`) and
+the 7-value enum are both unchanged; only this row's meaning column reads
+differently. See §10A.7.
+
+`[CONSEQUENTIAL-1, eval-spec-v1.5]` **`remedy_match_topup`'s admissible
+`decline_code` set widened to include `ambiguous_decline`** (table row
+above, and `ADMISSIBLE_DECLINE_CODES[REMEDY_MATCH_TOPUP]` in
+`src/rrx/agent/reason_codes.py`). Required by §10A.4 rule R-15. See
+§10A.7 for the full rationale.
 
 **`terminal_state` removed from this enum (reduced from 8 to 7 values).**
 `subscription_cancelled_by_customer` is the only `decline_code` for which
@@ -329,6 +348,337 @@ that fired (e.g. `"R_topup_insufficient_funds"`) — not left null.
 (§15's world-level-pairing caveat applies).
 
 The concrete decision table is implementation, not this design freeze.
+
+---
+
+## 10A. A3-D decision table — pre-registration `[AMENDMENT, eval-spec-v1.5]`
+
+**Status:** Pre-registered. Written and tagged before `src/rrx/agent/policy.py`
+exists and before any A3-D episode has been executed. This section supplies the
+concrete decision table §10 deferred ("The concrete decision table is
+implementation, not this design freeze"). Once tagged, it is subject to the same
+rule as every other frozen section: changes require a new tagged version and a
+`CHANGELOG.md` entry, and constitute a new tuning configuration under
+`EVAL.md §6A`.
+
+---
+
+### 10A.1 Scope and invocation preconditions
+
+A3-D is a pure, deterministic function `EpisodeView -> Proposal`
+(`EVAL.md §4.2`). It is invoked by `src/rrx/harness/runner.py` only on ticks
+where `tick_type == "wakeup"` (§3 step 4). Therefore, on entry:
+
+- `subscription_state not in {"cancelled", "expired", "active"}` — runner-suppressed (§5, §10A.2)
+- `budget_remaining >= 1` — otherwise `tick_type = "budget_exhausted"` (§7)
+- no prior `STOP` decision in this episode — otherwise `terminal_suppressed` (§6)
+- `decline_code in ALL_DECLINE_CODES` (8 values, `src/rrx/agent/reason_codes.py`).
+  `subscription_cancelled_by_customer` is not a `decline_code` and never reaches
+  a tick at all (`engine.py:438-443`; `EVAL.md §8` item 8)
+
+A3-D reads no field outside `EpisodeView` / `ContactRecord`
+(§4; `tests/test_no_latent_leak.py`). It performs no I/O, holds no state between
+ticks, and draws no randomness.
+
+---
+
+### 10A.2 Runner amendment — `"active"` is terminal `[D-1]`
+
+`src/rrx/harness/runner.py`'s `TERMINAL_SUBSCRIPTION_STATES` is amended from
+`{"cancelled", "expired"}` to `{"cancelled", "expired", "active"}`.
+
+**Reason.** `_retry_succeeds` sets `subscription_state = "active"` on invoice
+recovery. Without this amendment, a recovered episode remains non-terminal, keeps
+its remaining budget, and therefore produces full `wakeup` ticks on every
+subsequent day in the frozen wake-up set — each demanding a mandatory
+`reason_code` from §7's closed 7-value enum. No member of that enum denotes "this
+episode is already resolved." `terminal_state` was removed in `eval-spec-v1.4`
+on a rationale addressed solely to `subscription_cancelled_by_customer`
+(terminal at T=0, before any tick); the post-recovery `active` case was not
+considered and is reachable on a large fraction of the population.
+
+Suppressing these ticks mirrors §6's existing STOP semantics ("subsequent
+would-be wake-up days produce `tick_type=terminal_suppressed`") and requires no
+change to the frozen enum.
+
+**Consequences, declared before the run:** `tick_type` counts shift
+(`terminal_suppressed` up, `wakeup` down) for every arm run through the A3
+runner. `wait_rate`'s denominator (wake-up decisions, `EVAL.md §5.3`) therefore
+excludes post-recovery ticks, which is the intended reading — a decision that
+cannot affect the outcome is not restraint. NULL-POLICY parity was re-verified
+at 2,000/2,000 after this change (`tests/test_a3_runner_parity.py`); `null_policy`
+mutates no state, so `EpisodeResult` and the day-30 `EpisodeView` are unchanged.
+
+---
+
+### 10A.3 Restraint predicate — the withhold test `[D-3]` `[DESIGN]`
+
+```
+observations      = len(view.contact_history)
+any_engaged       = any(rec.engaged for rec in view.contact_history)
+withhold_applies  = (observations >= 2) and (not any_engaged)
+```
+
+`contact_history` includes Razorpay's automatic failure email as an entry
+(`EVAL.md §3.4`; `SIM.md §3`), so `observations` counts the auto-email at T+0,
+the halt email at T+3, and every agent contact. `withhold_applies` is therefore
+evaluable from the day-0 tick onward, because the runner sends the auto-email
+(§3 step 1) and rebuilds the view (step 2) before the policy is called (step 4).
+
+**Basis.** `channel_response_trait` (θ_c) is drawn once per episode and reused
+for every message in that episode (`SIM.md §3`; `episode.yaml#/latent/
+channel_response_propensity`), so observed non-engagement is genuine evidence
+about θ_c rather than independent noise. With mean θ_c = 0.28, the email
+multiplier 0.65 and WhatsApp 1.15, the auto-email engages with ≈0.18 and a first
+agent contact with ≈0.32; two consecutive non-engagements move the posterior on
+θ_c down materially. Meanwhile fatigue has already reduced the next contact's
+effectiveness to 0.80× and the cancellation hazard has risen to 1.5× its initial
+value. The first agent contact is never withheld — a single Bernoulli
+observation is too thin to justify silence — so the predicate gates only the
+second and third.
+
+**The threshold `observations >= 2` is `[DESIGN]`.** No frozen source implies it.
+It is fixed here, before any result exists, and changing it constitutes a new
+tuning configuration.
+
+**This predicate is the sole mechanism by which A3-D exercises `EVAL.md §3.4`'s
+third pre-registered advantage source** (within-episode adaptive contact, as
+narrowed by `SIM.md §10`). No other rule in this table reads engagement history.
+
+---
+
+### 10A.4 The decision table
+
+An **ordered list. First match wins.** This ordering is the tie-breaking rule
+required for totality; no rule is reachable by a view that an earlier rule
+matches. Every rule emits its own id as `Proposal.rationale` (§10: "always
+populated, with the internal rule identifier that fired").
+
+`CARD_BROKEN = {card_expired, debit_instrument_blocked, card_not_enabled_group}`
+`day = view.days_since_first_failure`
+
+| # | Condition | `action_type` | `remedy` | `reason_code` |
+|---|---|---|---|---|
+| **R-01** | `subscription_state == "active"` | STOP | — | `no_engagement_restraint` |
+| **R-02** | `decline_code == "payment_risk_check_failed"` | STOP | — | `risk_flagged` |
+| **R-03** | `decline_code == "transaction_limit_exceeded"` | STOP | — | `no_engagement_restraint` |
+| **R-04** | `decline_code == "bank_technical_error"` and `auto_retries_remaining > 0` | WAIT | — | `retry_window_open` |
+| **R-05** | `decline_code == "bank_technical_error"` | STOP | — | `no_engagement_restraint` |
+| **R-06** | `decline_code == "insufficient_funds"` and `subscription_state == "halted"` | STOP | — | `no_engagement_restraint` |
+| **R-07** | `decline_code == "insufficient_funds"` and `day >= 3` | STOP | — | `no_engagement_restraint` |
+| **R-08** | `decline_code == "insufficient_funds"` and `day == 0` | CONTACT | `topup_reminder` | `remedy_match_topup` |
+| **R-09** | `decline_code == "insufficient_funds"` and `day == 2` and not `withhold_applies` | CONTACT | `topup_reminder` | `engagement_observed` if `any_engaged` else `remedy_match_topup` |
+| **R-10** | `decline_code == "insufficient_funds"` | WAIT | — | `no_engagement_restraint` if `withhold_applies` else `retry_window_open` |
+| **R-11** | `decline_code in CARD_BROKEN ∪ {ambiguous_decline}` and `subscription_state == "halted"` and `day == 5` and `budget_remaining >= 1` | CONTACT | `card_change` | `post_halt_rescue` |
+| **R-12** | `decline_code in CARD_BROKEN` and `day == 0` | CONTACT | `card_change` | `remedy_match_card` |
+| **R-13** | `decline_code in CARD_BROKEN` and `day == 3` and not `withhold_applies` | CONTACT | `card_change` | `engagement_observed` if `any_engaged` else `remedy_match_card` |
+| **R-14** | `decline_code == "ambiguous_decline"` and `day == 0` | CONTACT | `card_change` | `remedy_match_card` |
+| **R-15** | `decline_code == "ambiguous_decline"` and `day == 2` and not `withhold_applies` | CONTACT | `topup_reminder` | `remedy_match_topup` `[CONSEQUENTIAL-1]` |
+| **R-16** | *(default — every remaining view)* | WAIT | — | `no_engagement_restraint` |
+
+---
+
+### 10A.5 Per-rule basis
+
+**R-01 `[D-1]` — defensive, structurally unreachable.** Under §10A.2 the runner
+suppresses `active` ticks, so this rule can never fire against a real tick. It is
+retained as a defensive guard on the same footing as gate rule R2 (§8:
+"Defensive only, in practice unreachable"), and is exercised only by synthetic
+views in `tests/test_a3d_policy.py`.
+
+**R-02 `[FORCED]`.** Gate R4 rejects any `CONTACT` when
+`decline_code == payment_risk_check_failed`, so contacting is impossible.
+`EVAL.md §5.3` amendment 3 defines escalation as `STOP` with
+`reason_code=risk_flagged`; §7 admits `risk_flagged` for this code alone.
+
+**R-03 `[FORCED mechanically]` `[D-2]`.** `SIM.md §2` sets `blocked_until` beyond
+every auto-retry day for this condition, so `§4`'s retry conjunction can never be
+satisfied in-window — invoice recovery is impossible. `SIM.md §5` restricts
+post-halt rescue to episodes whose `card_chargeable` was false at opening; this
+condition opens `card_chargeable = true`, so rescue is unreachable too. Gate R3
+independently forbids `card_change` here. No action of any kind can change this
+episode's outcome.
+
+**R-04 `[FORCED]`.** `episode.yaml#/latent/bank_technical_error_clearance` gives
+`blocked_until ~ Uniform(0, 2]`, and retries fire at T+1/T+2/T+3, so the block
+clears before the day-2 retry with certainty. Waiting is the correct remedy,
+exactly as `EVAL.md §3.2` states. `retry_window_open` is admissible for this
+code per §7.
+
+**R-05 `[D-2]`.** Reached only if retries are exhausted, which the mechanism above
+makes vanishingly rare. `card_chargeable = true` at opening (`SIM.md §2`) blocks
+the post-halt rescue path, so nothing further is reachable. This is the same
+mechanism behind `EVAL.md §4.1.1` item 2, which found A2-original's unguarded
+T+5 contact useless on 51 of 51 dev episodes.
+
+**R-06, R-07 `[FORCED mechanically]` `[D-2]` `[D-4]`.** Two independent grounds.
+(1) `EVAL.md §1.3` and `SIM.md §5`: invoice recovery occurs only via an auto-retry
+at T+1/T+2/T+3, and this condition opens `card_chargeable = true`, so `SIM.md §5`'s
+at-opening restriction rules out post-halt rescue — after halt, nothing is
+reachable. (2) The acceleration rule is
+`funds_available_from = min(original, t_engage + Exponential(mean 0.5))`
+(`SIM.md §3`). The exponential draw is strictly positive, so a dues-naming message
+engaged on day *t* yields funds strictly after *t*, and the day-*t* retry's
+`t >= funds_available_from` test fails. A topup reminder sent on day 3 therefore
+cannot affect the day-3 retry, and no later retry exists. **Days 3 and beyond are
+provably dead for this bucket.**
+
+**R-08, R-09 `[D-4]` `[DESIGN]`.** Day 0 is the earliest reachable decision point
+and its effect is visible to the retries at T+1, T+2 and T+3. Day 2 is the last
+day on which a topup can still affect an auto-retry, per the proof above, and
+leaves one intervening day in which engagement can be observed. Each engaged
+dues-naming message triggers a fresh `Bernoulli(p_topup_action = 0.35)` and a
+fresh `Exponential` draw (`SIM.md §3`, "drawn per engagement, not per customer"),
+so a second attempt is not redundant. Two attempts rather than three is a
+restraint choice, not a forced one: the third budget slot has no legal use in this
+bucket, since gate R3 forbids `card_change` here and days 3+ are dead.
+
+**R-10 `[D-3]`.** Covers day 1, and day 2 when the withhold test fires. The
+reason code distinguishes the two grounds for waiting: `retry_window_open` when
+retries may still resolve it unaided (admissible for this code per §7), and
+`no_engagement_restraint` when the withhold predicate is what suppressed the
+contact. This distinction is what makes the ledger's restraint accounting
+readable after the fact.
+
+**R-11 `[D-5]` `[D-6]` `[D-7]`.** Post-halt, subscription rescue is the only
+reachable value (`EVAL.md §1.3`; `SIM.md §5`), and only for episodes whose
+`card_chargeable` was false at opening — which is exactly `CARD_BROKEN` plus
+`ambiguous_decline`'s false draw. Day 5 matches
+`a2_strengthened_action_for_day`'s third contact, whose measured gain on this
+bucket was +5.6 rescue points at zero invoice-recovery cost (`EVAL.md §4.1.2`).
+**Exempt from the withhold test per `[D-7]`:** withholding here saves a
+cancellation hazard of 0.0225 and forfeits an attempt at one of `EVAL.md §7`'s
+two primary metrics. The asymmetry is deliberate and declared. The rule is gated
+to `day == 5` exactly; halted wake-ups on other days (7, 14, or engagement-driven)
+fall through to R-16, so this bucket never spends more than one post-halt contact.
+`budget_remaining >= 1` is guaranteed by the invocation precondition and is
+re-checked defensively.
+
+**R-12, R-13 `[D-5]`.** **A3-D deliberately adopts A2-strengthened's contact
+schedule (T+0 / T+3 / T+5-if-halted) unchanged.** A3-D is the control arm against
+which A3-LLM's incremental contribution is measured (`EVAL.md §4.2`), and it is
+also the arm from which any A3-D − A2 reading would be taken. Changing both the
+schedule and the decision logic relative to A2 would confound adaptivity with
+scheduling, leaving neither effect identifiable. **The single intended difference
+between A3-D and A2-strengthened on this bucket is that A3-D's day-3 contact is
+conditional on the withhold test and A2's is unconditional.** A mechanically
+earlier schedule (T+0/T+1) is available and would likely improve A3-D's invoice
+recovery — within-day ordering (`SIM.md §4`) means a day-1 contact is visible to
+the retries at T+1, T+2 and T+3 while a day-3 contact reaches only T+3 — and it is
+declined here on identifiability grounds, not oversight. Recorded so that the
+choice is auditable and so that no later run may adopt the stronger schedule
+without registering a new configuration.
+
+**R-14, R-15 `[D-6]`.** `EVAL.md §3.2` names the fail-safe card-change prompt as
+the correct remedy for this ambiguous bucket, and `population.yaml#/
+opening_conditions` sets `p_card_cause = 0.50`, so half the bucket is
+funds-caused. Day 0 sends the fail-safe. Day 2 hedges the funds branch on the last
+day a topup can still matter (R-06/R-07's proof applies identically here), and by
+then non-recovery after an engaged card-change prompt is weak evidence against the
+card branch, since a completed card change would likely have recovered at the T+1
+or T+2 retry. Day 5 post-halt returns to card-change via R-11. This is a
+remedy-matching decision A2 does not make — `a2_strengthened_action_for_day` sends
+`card_change` at T+0 and T+7 for this bucket and never a topup.
+
+**R-16 `[D-8]`.** A named, logged default rather than an implicit fallthrough, so
+that every decision carries an attributable rule id (§6: `rationale` mandatory).
+Its firing rate is a diagnostic: a rate materially above expectation indicates the
+table has a hole, and that finding is to be reported rather than silently patched.
+
+---
+
+### 10A.6 Gate-compliance proof
+
+§8 states A3-D "is gate-compliant by construction — its own decision logic
+never proposes a violating action." That claim is discharged as follows, and enforced by
+`tests/test_a3d_policy.py`.
+
+| Gate rule | Discharge |
+|---|---|
+| R1 (schema validity) | Every rule emits `action_type in {CONTACT, WAIT, STOP}` and `remedy in {card_change, topup_reminder}` iff `CONTACT`, null otherwise — enforced at `Proposal` construction (§6) |
+| R2 (terminal states) | Unreachable: `cancelled`/`expired` suppressed by the runner before invocation |
+| R3 (remedy match) | No rule emits `card_change` for `insufficient_funds` (R-06…R-10) or `transaction_limit_exceeded` (R-03 STOPs first) |
+| R4 (risk stop) | R-02 fires first and emits STOP |
+| R5 (budget) | `budget_remaining >= 1` by precondition; R-11 re-checks defensively |
+| R6 (quiet hours) | Declared vacuous in `sim-v1` (§8); executor stamps `send_hour = "10:00"` |
+| R7 (audit coverage) | Structural — one ledger record per tick, runner-guaranteed |
+| R8 (verified codes) | `decline_code in ALL_DECLINE_CODES` by cohort construction |
+
+**A gate rejection originating from A3-D output is a defect, not a result.** If one
+occurs during the dev run, work stops and the cause is reported; the table is not
+adjusted to make the rejection disappear.
+
+---
+
+### 10A.7 Reason-code admissibility
+
+Every `(reason_code, decline_code)` pair this table can emit satisfies §7's
+admissibility mapping, with one consequential amendment:
+
+`[CONSEQUENTIAL-1]` **§7's `remedy_match_topup` row is widened to include
+`ambiguous_decline`.** R-15 sends a dues-naming remedy for a bucket that is
+50% funds-caused by `population.yaml`'s own `p_card_cause = 0.50`, which is a
+remedy match in the ordinary sense of the term. §7 already admits
+`ambiguous_decline` under `post_halt_rescue`; its absence from
+`remedy_match_topup` is an omission rather than a decision, and is corrected here
+rather than worked around by emitting a less accurate code.
+`ADMISSIBLE_DECLINE_CODES[REMEDY_MATCH_TOPUP]` in
+`src/rrx/agent/reason_codes.py` is updated to match. No other row of §7's table
+changes; the enum remains at 7 values.
+
+`[D-2]` **§7's `no_engagement_restraint` row's meaning column is widened** from
+"Withholding — low observed engagement this episode" to "Withholding or
+stopping — either low observed engagement this episode, or a condition under
+which `SIM.md §2`–§5 make every available action a mechanical no-op." Its
+admissible `decline_code` set (any except `subscription_cancelled_by_customer`)
+is unchanged, and the enum remains at 7 values.
+
+**Why `STOP` rather than `WAIT` for the mechanically-dead conditions
+(R-03, R-05, R-06, R-07).** Routing them to `WAIT` would place environment-forced
+inaction in `wait_rate`'s numerator. `EVAL.md §8` item 8 already forbids
+presenting environment-enforced restraint as agent judgement for the
+cancelled-at-open bucket; the same principle applies to `transaction_limit_exceeded`
+(1%), `bank_technical_error` (3%), and post-halt `insufficient_funds`. `STOP`
+keeps `wait_rate` a measure of discretionary restraint. These STOPs are
+nonetheless real decisions — the agent recognises an unrecoverable condition and
+forgoes its remaining budget — and are recorded as such in the ledger.
+
+---
+
+### 10A.8 Contact-budget accounting
+
+Maximum agent contacts under this table, by bucket:
+
+| Bucket | Days | Max contacts | Budget |
+|---|---|---|---|
+| `CARD_BROKEN` | 0, 3, 5-if-halted | 3 | 3 |
+| `ambiguous_decline` | 0, 2, 5-if-halted | 3 | 3 |
+| `insufficient_funds` | 0, 2 | 2 | 3 |
+| `bank_technical_error` | — | 0 | 3 |
+| `transaction_limit_exceeded` | — | 0 | 3 |
+| `payment_risk_check_failed` | — | 0 | 3 |
+
+No bucket can exceed the 3-contact budget (`episode.yaml#/agent_budget/
+max_contacts_per_episode`), so gate R5 is never reached through A3-D output —
+consistent with §8's enforcement-by-construction framing. The withhold test can
+only reduce these counts, never increase them.
+
+---
+
+### 10A.9 Tuning-configuration identity
+
+This section, as tagged, **is A3-D configuration #1 of the N=3 budget**
+(`EVAL.md §6A`). Any subsequent change to any rule, ordering, threshold, remedy,
+reason-code assignment, or to the withhold predicate constitutes configuration #2,
+and must be recorded in `results/tuning_log.md` **before** it is executed. The
+`[DESIGN]`-tagged quantities most likely to attract revision are named here so
+that a later change cannot be characterised as a clarification: the withhold
+threshold `observations >= 2` (§10A.3), the `insufficient_funds` day set `{0, 2}`
+(R-08/R-09), and the `ambiguous_decline` day-2 remedy choice (R-15).
+
+**No A3-D result of any kind exists at the time this section is tagged.**
+`src/rrx/agent/policy.py` is not implemented in this pass (Stage 5E) — this
+section is specification only.
 
 ---
 

@@ -51,13 +51,21 @@ ALL_DECLINE_CODES: frozenset[str] = frozenset({
     "payment_risk_check_failed",
 })
 
-# docs/A3-DESIGN.md §7's table, verbatim ("Admissible decline_code(s)" column).
+# docs/A3-DESIGN.md §7's table, verbatim ("Admissible decline_code(s)"
+# column). REMEDY_MATCH_TOPUP widened to include ambiguous_decline,
+# eval-spec-v1.5 [CONSEQUENTIAL-1] - see docs/A3-DESIGN.md §10A.7. R-15
+# (docs/A3-DESIGN.md §10A.4) sends a topup reminder to the ambiguous
+# bucket, which is 50% funds-caused (population.yaml p_card_cause=0.50);
+# §7 already admitted ambiguous_decline under POST_HALT_RESCUE, so its
+# absence here was an omission, corrected rather than worked around.
 ADMISSIBLE_DECLINE_CODES: dict[str, frozenset[str]] = {
     REMEDY_MATCH_CARD: frozenset({
         "card_expired", "debit_instrument_blocked", "card_not_enabled_group",
         "ambiguous_decline", "bank_technical_error",
     }),
-    REMEDY_MATCH_TOPUP: frozenset({"insufficient_funds", "transaction_limit_exceeded"}),
+    REMEDY_MATCH_TOPUP: frozenset({
+        "insufficient_funds", "transaction_limit_exceeded", "ambiguous_decline",
+    }),
     RETRY_WINDOW_OPEN: frozenset({
         "insufficient_funds", "bank_technical_error", "transaction_limit_exceeded",
     }),

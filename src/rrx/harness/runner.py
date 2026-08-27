@@ -75,7 +75,19 @@ WAKEUP_DAYS = frozenset({0, 1, 2, 3, 5, 7, 14})
 # returns before the loop starts, mirroring engine.py:438-443); "expired"
 # never occurs in sim-v1. Both are checked anyway, matching R2's own
 # defensive-only set (§8) and §7's literal wording.
-TERMINAL_SUBSCRIPTION_STATES = frozenset({"cancelled", "expired"})
+#
+# "active" added under docs/A3-DESIGN.md §10A.2 [D-1] (eval-spec-v1.5):
+# _retry_succeeds sets subscription_state="active" on invoice recovery.
+# Without suppressing it here, a recovered episode stayed non-terminal,
+# kept its remaining budget, and produced a full wakeup tick on every
+# later wake-up day - each demanding a reason_code from §7's closed
+# 7-value enum, none of which means "already resolved". Suppressing these
+# ticks mirrors §6's existing post-STOP terminal_suppressed semantics and
+# requires no change to that enum. wait_rate's denominator (wake-up
+# decisions, EVAL.md §5.3) correspondingly excludes post-recovery ticks -
+# the intended reading, since a decision that cannot affect the outcome
+# is not restraint.
+TERMINAL_SUBSCRIPTION_STATES = frozenset({"cancelled", "expired", "active"})
 
 TICK_WAKEUP = "wakeup"
 TICK_NO_WAKEUP = "no_wakeup"
