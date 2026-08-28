@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import pytest
 
+from rrx.baselines.a1 import a1_action_for_day
 from rrx.sim import engine
 from rrx.sim.cohort import sample_cohort_episode
 from rrx.sim.engine import (
@@ -48,14 +49,21 @@ INDICES = range(1000, 1000 + N)
 # Shared arm definitions (Test 1, Test 2)
 # ===========================================================================
 
-def a1_action_for_day(opening_condition_key: str, day: int, subscription_state: str) -> str | None:
-    """A1-ish (declared, per the task): naive fixed-contact policy - two
-    contacts at T+0 and T+3, regardless of opening condition or
-    subscription state, no adaptive reasoning. Content choice (declared
-    here, since the task does not specify one): `card_change` uniformly -
-    a generic default, matching what Razorpay's own automatic email
-    emphasizes as primary content (SIM.md §3's action table)."""
-    return "card_change" if day in (0, 3) else None
+# HISTORICAL PROVENANCE, preserved: `a1_action_for_day` was originally
+# defined locally in this file, self-labelled "A1-ish" throughout this
+# module - a naive fixed-contact policy (T+0/T+3, `card_change`
+# uniformly, no adaptive reasoning), declared here because, at the time
+# this test was written (Day 2 Stage 5, commit `cdd118a`), no frozen
+# specification defined A1's remedy content. `eval-spec-v1.6` (`EVAL.md
+# §4.3`, `[CONSEQUENTIAL-2]`) later formally adopted this exact
+# operationalization as canonical A1. It now lives in
+# `src/rrx/baselines/a1.py` and is imported above rather than redefined
+# here - behaviorally identical, byte-for-byte, to what this file
+# originally declared inline (see `tests/test_a1.py` for the enforcing
+# equivalence check). This module's every other reference to "A1-ish" below is left
+# as originally written - it documents this test's own history at the
+# time it was authored, before canonical adoption existed, and is not
+# rewritten to say "A1" merely because the name is now also canonical.
 
 
 _CARD_CHANGE_IS_CORRECT = frozenset(
