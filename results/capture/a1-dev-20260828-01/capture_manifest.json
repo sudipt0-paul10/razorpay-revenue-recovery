@@ -1,0 +1,13 @@
+{
+  "capture_git_sha": "1f5a3a02df3a36ce93be755d5099f8c04a96bf66",
+  "capture_timestamp": "2026-08-28T08:41:27.085432+05:30",
+  "config_hash": "d1a8e016329de4095becb3b70662a3bb6b5f400c86e087df649f2054f8798866",
+  "index_end": 2999,
+  "index_start": 1000,
+  "master_seed": 20260825,
+  "n": 2000,
+  "original_git_sha": "f5c992ae6fc98ff1230e8e0e91cf1f361a589f43",
+  "original_run_id": "a1-dev-20260828-01",
+  "spec_version": "eval-spec-v1.6",
+  "split": "dev"
+}

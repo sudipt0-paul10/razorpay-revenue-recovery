@@ -1,0 +1,13 @@
+{
+  "capture_git_sha": "1f5a3a02df3a36ce93be755d5099f8c04a96bf66",
+  "capture_timestamp": "2026-08-28T08:40:04.717580+05:30",
+  "config_hash": "d1a8e016329de4095becb3b70662a3bb6b5f400c86e087df649f2054f8798866",
+  "index_end": 2999,
+  "index_start": 1000,
+  "master_seed": 20260825,
+  "n": 2000,
+  "original_git_sha": "e829161b8b174d2afca317f571048810b426b587",
+  "original_run_id": "a3d-dev-20260828-01",
+  "spec_version": "eval-spec-v1.5",
+  "split": "dev"
+}
