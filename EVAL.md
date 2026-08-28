@@ -710,6 +710,75 @@ is preserved unrewritten per this file's own §0 rule. See
 
 ---
 
+**Holdout comparator tie-set rule — evaluability defect resolved `[CONSEQUENTIAL-3, eval-spec-v1.7]`**
+
+**Status: a new consequential methodological decision / validity-defect
+amendment, not a recovered historical rule and not a clarification.**
+Criterion 2 above requires A3 to exceed "the best-performing bounded
+non-agent arm's rate" and separately states that a tie among bounded arms
+"is reported explicitly, not silently resolved by point estimate alone" —
+but it never specifies what A3 must then clear when the best-performing
+arms are themselves tied. Criterion 3 compounds this: it ties the
+contact-budget check to "the SAME bounded arm that won the rate
+comparison for that metric," which presumes a single winner exists.
+Neither a single-arm point-estimate tie-break nor a multi-arm tie-set
+requirement is authorized anywhere in the existing frozen text — this is
+a genuine evaluability gap in the original criteria (they cannot be
+mechanically applied when the best-performing bounded arms are
+statistically indistinguishable), not an ambiguity resolved by reading
+them more carefully. It is closed here, before holdout is accessed, by
+the rule below.
+
+1. On EACH primary metric independently, the bounded-arm comparator
+   determination is made using HOLDOUT data, never DEV results.
+2. Identify the bounded arm with the highest HOLDOUT point estimate for
+   that metric.
+3. The comparator set for that metric consists of: that
+   highest-point-estimate bounded arm, plus every other bounded arm
+   whose pairwise 95% CI against it (on holdout) includes zero.
+4. A3 satisfies criterion 2 on that metric only if A3's holdout rate
+   exceeds EVERY member of that comparator set, with the 95% CI on each
+   corresponding A3-minus-comparator-arm difference excluding zero.
+5. If the comparator set contains more than one arm, that tie is
+   reported explicitly (criterion 2's existing tie-reporting language,
+   unchanged).
+6. Criterion 3 inherits the comparator set defined under criterion 2 for
+   that metric. A3 must therefore satisfy both contact constraints —
+   total contacts ≤ comparator's, and contacts per rescue ≤ comparator's
+   — against EVERY member of the comparator set, not only a single
+   highest-point-estimate arm.
+7. If the comparator set contains exactly one arm, this rule reduces
+   exactly to the pre-existing §7 criteria 2/3 as already written above
+   — no behavior change in the non-tied case.
+
+**This rule is conservative, not permissive.** Widening the comparator
+set to every arm statistically tied with the top performer can only add
+arms A3 must beat and contact constraints A3 must satisfy — it can never
+shrink the comparator set or relax a constraint relative to the
+single-arm case. It does not lower the bar to make any future A3 result
+more likely to pass.
+
+**The DEV tie observed is evidence this defect is live, not an input to
+the rule.** On `dev`, A1 and A2-strengthened are statistically
+indistinguishable on invoice recovery (A1 − A2-strengthened: +0.0010,
+95% CI [−0.0060, +0.0080] — full figures in
+`diagnostics/stage5d_dev_statistical_results.md`, committed `06b43a8`).
+This DEV result did not create the defect — the gap was already latent
+in the original criteria 2/3 text — but it is what surfaced it ahead of
+holdout access, and is why this gap is closed prospectively now rather
+than left to be resolved ad hoc once a holdout tie is or isn't observed.
+It is cited here only as motivation: the holdout comparator set for any
+metric is determined solely from holdout arm outcomes, computed after
+this rule is frozen and after holdout is run — never from this or any
+other DEV result.
+
+**`§4.3`'s A1 canonicalization is unaffected.** A1's content, schedule,
+and status are untouched by this section.
+
+See `CHANGELOG.md`'s `eval-spec-v1.7` entry for the full record.
+
+---
+
 ## 8. Threats to validity
 
 1. **We wrote the world the agent competes in.** Simulator frozen

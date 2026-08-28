@@ -1,5 +1,80 @@
 # Changelog
 
+## eval-spec-v1.7 — Holdout comparator tie-set rule (evaluability-defect amendment) — 2026-08-28
+
+`[CONSEQUENTIAL-3]` A NEW CONSEQUENTIAL METHODOLOGICAL DECISION /
+VALIDITY-DEFECT AMENDMENT, not a recovered historical rule and not a
+clarification.
+
+**The defect.** `EVAL.md §7` criterion 2 requires A3 to exceed "the
+best-performing bounded non-agent arm's rate" and separately states that
+a tie among bounded arms "is reported explicitly, not silently resolved
+by point estimate alone" — but never specifies what A3 must clear when
+the best-performing arms are themselves tied. Criterion 3 compounds
+this: it ties the contact-budget check to "the SAME bounded arm that won
+the rate comparison for that metric," which presumes a single winner
+exists. Neither a single-arm point-estimate tie-break nor a multi-arm
+tie-set requirement is authorized anywhere in the frozen text. This is a
+genuine evaluability gap in the original criteria — they cannot be
+mechanically applied when the best-performing bounded arms are
+statistically indistinguishable — not an ambiguity resolvable by reading
+them more carefully.
+
+**Why now.** The DEV paired-bootstrap analysis
+(`diagnostics/stage5d_dev_statistical_results.md`, committed `06b43a8`)
+found A1 and A2-strengthened statistically indistinguishable on invoice
+recovery (A1 − A2-strengthened: +0.0010, 95% CI [−0.0060, +0.0080]) while
+both clearly separate from A0. This DEV result did not create the
+defect — it was already latent in the frozen §7 text — but it is what
+surfaced it, ahead of holdout access. Consistent with this project's
+standing discipline against letting evaluation definitions bend to a
+specific result, this gap is closed prospectively, before any holdout
+run, rather than left to be resolved ad hoc once a holdout tie is or
+isn't observed.
+
+**The new rule (`EVAL.md §7`, new paragraph appended after the existing
+criteria):**
+
+1. Per primary metric, the comparator determination uses HOLDOUT data
+   only — never DEV.
+2. Identify the bounded arm with the highest holdout point estimate on
+   that metric.
+3. The comparator set = that arm, plus every other bounded arm whose
+   pairwise 95% CI against it (on holdout) includes zero.
+4. A3 satisfies criterion 2 on that metric only if it beats EVERY member
+   of that set, each difference's 95% CI excluding zero.
+5. A multi-arm comparator set is reported explicitly (unchanged
+   tie-reporting language).
+6. Criterion 3's contact-budget check inherits the same comparator set —
+   A3 must satisfy both contact constraints against every member, not
+   just one arm.
+7. A single-arm comparator set reduces exactly to the pre-existing §7
+   criteria — no behavior change in the non-tied case.
+
+**This rule is conservative, not permissive:** widening the comparator
+set to every arm statistically tied with the top performer can only add
+arms A3 must beat and contact constraints A3 must satisfy — never shrink
+the set or relax a constraint. It does not lower the bar to make any
+future A3 result more likely to pass.
+
+**Frozen before holdout access.** As of this entry, holdout has not been
+run. This rule is adopted before any holdout arm outcome exists, so it
+cannot have been shaped by a holdout result.
+
+**No DEV result was used to choose the eventual holdout comparator.**
+The DEV tie is cited above only as the evidence that motivated closing
+this gap now; it plays no role in which arms end up in any future
+holdout comparator set — that set is determined solely by holdout data,
+per the rule above, once holdout is run.
+
+**A1 unaltered.** `EVAL.md §4.3`'s canonical A1 adoption
+(`eval-spec-v1.6`) is unaffected; this entry does not touch A1's
+content, schedule, or status.
+
+No file under `src/` or `tests/` changed. No simulator, gate, or A3-D
+change. No A0/A1/A2/A3-D cohort run, DEV or holdout. No comparator
+selected.
+
 ## eval-spec-v1.6 — Canonical A1 content/remedy adoption — 2026-08-28
 
 `[CONSEQUENTIAL-2]` A NEW CONSEQUENTIAL DECISION, not a recovered
