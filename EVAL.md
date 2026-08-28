@@ -342,6 +342,167 @@ re-tuned in response — the same discipline this file's §7 "Declared
 failure" paragraph already applies to A3 vs. the bounded baselines
 applies here to A3-D vs. A3-LLM.
 
+### 4.3 A1 — canonical content/remedy adoption `[CONSEQUENTIAL-2, eval-spec-v1.6]`
+
+**Status: a new consequential decision, not a recovered historical
+specification and not a clarification.** The "A1 — Naive dunning" row
+above (§4) is preserved unrewritten; its schedule — contacts at T+0 and
+T+3, same two contacts to everyone, regardless of state or reason — has
+been frozen spec text since this section's original authorship
+(`d04d158:EVAL.md`, the source of the currently-restored §4). That row
+never specified the contact's remedy/content, and no commit before this
+one filled that gap. A repository-wide provenance investigation
+(2026-08-28, read-only, no file changed) established the following:
+
+- The only executable implementation of A1 anywhere in this repository,
+  `tests/test_stage5_falsification.py::a1_action_for_day`
+  (`"card_change" if day in (0, 3) else None`, introduced Day 2 Stage 5,
+  commit `cdd118a`), has a docstring stating the content choice was
+  "declared here, since the task does not specify one" — a
+  contemporaneous admission it was invented to make a test runnable, not
+  derived from frozen text.
+- `SIM.md §8`'s falsification hypothesis and that test file label this
+  construction **"A1-ish"** throughout, never plain "A1."
+  `diagnostics/day3_baseline_headroom.py`, which later reused this same
+  policy to compute headroom figures, states in its own header:
+  "NON-CANONICAL DIAGNOSTIC OUTPUT... not part of the frozen A0-A4 arm
+  registry."
+- Unlike A2-corrected-v1/A2-strengthened (`src/rrx/baselines/
+  a2_variants.py`, adopted at `§4.1.1`/`§4.1.2`), A1's content was never
+  moved into production code or given a written schedule the way this
+  file gives A2's.
+
+**This section now formally adopts `card_change` as canonical A1's
+content, for both contacts.** This is a decision made now, not a fact
+being restored. Distinguish, going forward:
+
+- **Original frozen specification** (§4's table, unchanged): the T+0/T+3
+  schedule and "regardless of state or reason" behavior only.
+- **Diagnostic implementation** (`tests/test_stage5_falsification.py`,
+  `diagnostics/day3_*.py`): self-labelled "A1-ish," non-canonical,
+  produced the `card_change` operationalization and the `0.4840`
+  invoice-recovery figure cited in §7 below, but was never itself
+  adopted as spec.
+- **Canonical adoption** (this section, `eval-spec-v1.6`): `card_change`
+  at both T+0 and T+3, adopted now, for the reasons below.
+
+**The decision space.** "Regardless of state or reason" (§4) requires
+A1's remedy to be uniform across every `decline_code` — a
+decline-code-dependent remedy would not be "naive," it would be A2's
+remedy-matching logic under a different name. Given the v1 action space
+(§1.2, `SIM.md §3`), exactly two uniform operationalizations exist:
+`send_card_change_prompt` uniformly, or `send_topup_reminder` uniformly.
+**Neither was ever historically specified. `card_change` is the one
+adopted here.**
+
+**Rationale — mechanism, not outcome.** `SIM.md §3`'s card-naming/
+dues-naming mechanism is symmetric in kind but not in reach:
+
+> "a card-change prompt sent for an `insufficient_funds` episode names
+> the card. The card was never broken. Nothing changes. This is a
+> no-op, not a penalty." (`SIM.md §3`)
+
+The same logic runs the other way: a topup reminder sent to a
+card-broken episode names dues the customer already has; nothing about
+the broken card changes. Both remedies are no-ops outside their matching
+branch. What differs is which branch each remedy is a no-op *in*, sized
+against `EVAL.md §3.2`'s frozen population weights and
+`configs/population.yaml`'s `p_card_cause: 0.50` for the `ambiguous`
+bucket:
+
+- `card_change` is value-bearing for `card_expired` (16%) +
+  `debit_instrument_blocked` (12%) + `card_not_enrolled`+aliases (6%) =
+  34%, plus the `card_chargeable=false` half of `ambiguous_decline`
+  (24% × 0.50 = 12 points) — **≈46% of the population.**
+- `topup_reminder` is value-bearing only for `insufficient_funds` (32%)
+  and the fund-driven half of `ambiguous_decline` (≈12 points) —
+  **≈44% of the population** — nominally close, but see the mechanical
+  point below, which is decisive.
+- `transaction_limit_exceeded` (1%) and `bank_technical_error` (3%) are
+  no-ops for *either* remedy (`docs/A3-DESIGN.md §10A.5`'s R-03/R-05
+  proofs: `blocked_until` beyond every retry day, or resolved before any
+  contact could matter) — this 4% is unaffected by the choice.
+  `subscription_cancelled_by_customer` (5%) never reaches a day-loop
+  tick for *any* arm, A1 included (`engine.py:438-443`; `EVAL.md §8`
+  item 8), so A1's uniform schedule does not reach it either, regardless
+  of content.
+
+**The mechanically decisive point, specific to A1's exact T+0/T+3
+schedule**, not just population share: `SIM.md §3`'s dues-naming
+acceleration rule is `funds_available_from = min(original_delay,
+t_engage + Exponential(mean 0.5 days))` — the exponential draw is
+strictly positive, so an engaged topup reminder can only ever push funds
+available *strictly after* the day it was engaged. A topup sent on day 3
+(A1's second contact) therefore cannot affect day 3's own retry check,
+and no later retry exists — **A1's second contact would be a structural
+no-op for every `insufficient_funds` episode if `topup_reminder` were
+adopted.** Card-naming carries no such lag: `SIM.md §4`'s within-day
+ordering ruling states "an engaged message on day t changes physical
+state immediately, and that change is visible to that same day's
+end-of-day retry" — so a `card_change` contact engaged on day 3 remains
+live for day 3's own retry check. Adopting `card_change` is therefore
+the choice under which **both** of A1's two contacts can mechanically
+matter for invoice recovery; adopting `topup_reminder` would have made
+one of them provably inert by construction.
+
+**This paragraph's purpose is not to claim A1 will win anything** — no
+A1 result exists yet, and none is asserted here. It is to record, before
+any canonical A1 result exists, that this choice does not lower A1's bar
+to make any other arm look better by comparison: `card_change` reaches
+more of the population, and reaches all of it with both scheduled
+contacts mechanically live, rather than one of two.
+
+**Temporal ordering, disclosed explicitly.** The `card_change`
+operationalization itself predates A3-D's existence — it originates in
+Day 2 Stage 5 diagnostic work (`tests/test_stage5_falsification.py`,
+commit `cdd118a`), well before `docs/A3-DESIGN.md §10A` or
+`src/rrx/agent/policy.py` were written. However, **this section's formal
+adoption of it as canonical is being made after A3-D's first raw dev
+result already exists**: run ID `a3d-dev-20260828-01`, git SHA
+`e829161b8b174d2afca317f571048810b426b587`, executed and recorded
+2026-08-28, under `docs/A3-DESIGN.md §10A`'s already-tagged
+(`eval-spec-v1.5`) A3-D configuration #1. This amendment does not select
+`card_change` by looking at that result and choosing whichever content
+makes A3-D compare more favorably — no comparison of any kind has been
+performed at any point up to and including this section's writing, and
+the rationale above is derived entirely from `SIM.md` mechanics and
+`EVAL.md §3.2`/`population.yaml` weights that were fixed before A3-D
+existed. Recorded here so a future reader can verify the ordering rather
+than take the claim on faith.
+
+**§5.2 scope, resolved for this arm.** §5.2's safety invariants are
+titled "Safety gates," every row's cited enforcing test is a gate test
+(`test_gate_*.py`, `test_audit_coverage.py`,
+`test_unverified_not_emitted.py`), and the `[AMENDMENT, eval-spec-v1.4]`
+note directly below that table ties the whole section to
+`docs/A3-DESIGN.md §8`'s R1–R8 gate mechanism. Structurally, that gate
+(`src/rrx/agent/gate.py`) is invoked only inside
+`rrx.harness.runner.run_episode_a3` — the runner A3-D/A3-LLM use.
+`rrx.sim.engine.run_episode`, which A0/A1/A2 use, has no gate, no
+`Proposal`, no `reason_code`, and no per-tick record of any kind. A1's
+uniform, condition-blind `card_change` schedule therefore does reach
+conditions §5.2 would forbid an agent proposal from reaching — most
+notably `payment_risk_check_failed` (1%), which A2's own policy
+explicitly excludes but A1's does not — **and this is adopted as the
+deliberate scope of §5.2, not a violation of it.** §5.2 constrains what
+the agent's gate accepts; it does not, on its own text or its own
+enforcing tests, constrain what a non-agent strawman arm's naive,
+ungated policy does. Being naive and ungated is A1's declared role (§4:
+"Strawman"), not an oversight. **This is a stated interpretation of an
+existing invariant's scope, adopted now — like the content choice above,
+it is a decision, not a fact this file previously settled.** The
+invariant itself, the gate, and A3-D are unmodified by this reading.
+
+**The existing §7 illustrative figure.** §7's "best-bounded A1 at
+0.4840" is not recalculated or deleted here. It is relabelled by this
+section as **historical/diagnostic provenance**: it was produced by the
+pre-canonicalization `A1-ish` construction described above, before this
+section's formal adoption existed, and it remains illustrative headroom
+evidence only — never a fixed holdout target (§7's own text already says
+so). Whether a canonical A1 dev run reproduces `0.4840` is an open,
+falsifiable question this section does not answer; no canonical A1 run
+has been executed as of this writing.
+
 ---
 
 ## 5. Metrics

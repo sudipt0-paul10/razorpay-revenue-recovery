@@ -1,5 +1,98 @@
 # Changelog
 
+## eval-spec-v1.6 — Canonical A1 content/remedy adoption — 2026-08-28
+
+`[CONSEQUENTIAL-2]` A NEW CONSEQUENTIAL DECISION, not a recovered
+historical specification and not a clarification. `EVAL.md §4`'s A1 row
+("Same two contacts to everyone at T+0 and T+3, regardless of state or
+reason") has specified A1's schedule since this section's original
+authorship (`d04d158:EVAL.md`) and was never rewritten. It never
+specified the contact's remedy/content, and no commit before this one
+filled that gap.
+
+A repository-wide provenance investigation (2026-08-28, read-only, no
+file changed) established: the only executable A1 implementation
+anywhere, `tests/test_stage5_falsification.py::a1_action_for_day`
+(introduced `cdd118a`, Day 2 Stage 5), chose `card_change` uniformly,
+with its own docstring admitting the choice was "declared here, since
+the task does not specify one." That file and `SIM.md §8` label the
+construction "A1-ish" throughout, never plain "A1."
+`diagnostics/day3_baseline_headroom.py`, which later reused it to
+compute headroom figures, states in its own header: "NON-CANONICAL
+DIAGNOSTIC OUTPUT... not part of the frozen A0-A4 arm registry." Unlike
+A2-corrected-v1/A2-strengthened, A1's content was never moved into
+`src/` or written into `EVAL.md` prose the way A2's was
+(`§4.1.1`/`§4.1.2`).
+
+`EVAL.md §4.3` (new) now formally adopts `card_change` at both T+0 and
+T+3 as canonical A1. Full rationale in that section; summary:
+
+- Two uniform operationalizations were possible (`card_change` or
+  `topup_reminder` at both contacts) — "regardless of state or reason"
+  rules out anything decline-code-dependent. Neither was historically
+  specified.
+- `card_change` is value-bearing for ≈46% of the population
+  (`card_expired`+`debit_instrument_blocked`+`card_not_enrolled`-aliases
+  = 34%, plus the `card_chargeable=false` half of `ambiguous_decline` at
+  `population.yaml`'s `p_card_cause=0.50`) vs. `topup_reminder`'s ≈44%
+  (`insufficient_funds` + the fund-driven half of `ambiguous_decline`).
+- Mechanically decisive, independent of the population math: `SIM.md
+  §3`'s dues-naming acceleration rule (`funds_available_from =
+  min(original, t_engage + Exponential(mean 0.5))`, strictly positive)
+  means a topup sent on day 3 — A1's second contact — could never affect
+  day 3's own retry, and no later retry exists, so `topup_reminder`
+  would make A1's SECOND contact a structural no-op for its entire
+  matching bucket. `SIM.md §4`'s within-day-ordering ruling gives
+  `card_change` no such lag: a day-3 engagement is visible to day 3's
+  own retry check. Adopting `card_change` keeps both of A1's contacts
+  mechanically live; `topup_reminder` would not have.
+- Recorded to show the choice does not lower A1's bar to make A3-D look
+  better — not to claim A1 will win anything. No A1 result of any kind
+  exists at the time of this entry.
+
+**Temporal ordering, disclosed explicitly.** The `card_change`
+operationalization predates A3-D entirely (Day 2 Stage 5, before
+`docs/A3-DESIGN.md §10A` existed). This entry's formal *adoption* of it,
+however, comes strictly after A3-D's first raw dev result: run ID
+`a3d-dev-20260828-01`, git SHA
+`e829161b8b174d2afca317f571048810b426b587`, executed and recorded
+2026-08-28 (A3-D configuration #1 under the already-tagged
+`eval-spec-v1.5` `§10A`). No A3-D-vs-anything comparison has been
+performed at any point up to and including this entry; the content
+choice was not selected by observing that result. `results/
+a3d-dev-20260828-01/` is untouched by this entry and remains valid as an
+A3-D configuration #1 observation; formal A3-D-vs-A1 comparison is
+deferred until a canonical A1 dev run exists.
+
+**§5.2 scope, resolved for A1.** `EVAL.md §4.3` also records, as a new
+interpretive decision (not a rewrite of the invariant, the gate, or
+A3-D): §5.2's safety invariants are titled "Safety gates," enforced by
+gate tests, and cross-referenced (`[AMENDMENT, eval-spec-v1.4]`) to
+`docs/A3-DESIGN.md §8`'s R1-R8 mechanism, which only
+`rrx.harness.runner.run_episode_a3` (A3-D/A3-LLM) invokes.
+`rrx.sim.engine.run_episode` (A0/A1/A2) has no gate, `Proposal`, or
+`reason_code` mechanism at all. §5.2 is therefore read as scoped to the
+agent execution/gate pathway; A1's naive, condition-blind schedule
+reaching e.g. `payment_risk_check_failed` (which A2's own policy
+explicitly excludes) is adopted as A1's deliberate strawman role
+(`EVAL.md §4`: "Strawman"), not a violation of §5.2.
+
+**The existing §7 illustrative figure ("best-bounded A1 at 0.4840")** is
+relabelled, not recalculated or deleted, as historical/diagnostic
+provenance from the pre-canonicalization `A1-ish` construction — see
+`EVAL.md §4.3`'s closing paragraph. Whether a canonical A1 dev run
+reproduces it is an open question; no canonical A1 run has been
+executed.
+
+**`results/tuning_log.md` does not exist.** Not created by this entry;
+its creation is not required by any existing frozen instruction consulted
+here. If a later stage logs A3-D configuration #1 or a future A1
+configuration, that entry must state honestly that it was written after
+execution, not backdated.
+
+No file under `src/` or `tests/` changed. No simulator, gate, or A3-D
+change. No A0/A1/A2/A3-D cohort run. No comparator selected.
+
 ## eval-spec-v1.5 — A3-D decision-table pre-registration — 2026-08-27
 
 Tagged before `src/rrx/agent/policy.py` exists and before any A3-D episode has
