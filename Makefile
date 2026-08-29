@@ -1,4 +1,4 @@
-.PHONY: test lint eval sweep
+.PHONY: test lint eval sweep docs
 
 test:
 	pytest
@@ -11,3 +11,6 @@ eval:
 
 sweep:
 	python -m rrx.eval.runner --sweep
+
+docs:
+	python -m rrx.spec.sensitivity_doc
