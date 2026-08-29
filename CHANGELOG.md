@@ -1,5 +1,72 @@
 # Changelog
 
+## eval-spec-v1.8 — pre-holdout scope, undeclared omissions, and one added invariant — 2026-08-29
+
+Pre-registration-only stage. No simulator, agent, config, or test change.
+No `holdout` index accessed. Committed before the single authorized
+`holdout` run, so every rule under which that run is scored predates its
+results.
+
+### What changed in the specification
+
+| Item | Class | Summary |
+|---|---|---|
+| A | `AMENDMENT` | `holdout` = {A0, A1, A2-strengthened, A3-D, A4}. A3-LLM excluded for budget, not performance. Inference of an A3-LLM `holdout` figure prohibited |
+| B.1 | `AMENDMENT` | §6A's N=2,000 confirmation of GPT-C2 not executed; all A3-LLM figures are N=500 |
+| B.2 | `AMENDMENT` | §8 item 4's three repeat runs not executed; **no nondeterminism evidence exists** |
+| C | `CORRECTION` | Sweep is 26 cells, not 22; 80% threshold unchanged, pass mark 21/26; membership untouched |
+| D | `AMENDMENT` | Criterion 5's two LLM-named failure modes are injected against a stubbed planner |
+| E | `INVARIANT` | Gate-accepted proposals must have a legal executor mapping; added to §5.2, scored under criterion 1 |
+
+### On B.2 — the omission with the widest reach
+
+The three repeat runs were prescribed precisely because cache replay
+cannot measure variance and `temperature` could not be pinned to 0. All
+three legs of §8 item 4's determinism argument are now absent:
+`temperature=1` is forced by the endpoint, the repeat runs were never
+built, and cache replay is byte-identical by construction. The honest
+position is that A3-LLM's single N=500 figure is one observation from a
+process of unmeasured variance. That is what this entry declares, and no
+artifact may imply otherwise. This omission was silent until this entry;
+declaring it is the point of the entry.
+
+### On E — why an invariant, not a limitation
+
+The catch-all branch in `src/rrx/harness/runner.py` collapses two
+distinct events — a gate rejection, and a gate acceptance the executor
+cannot honour — into one indistinguishable ledger outcome. Verification
+against `26ba176` indicates the second is unreachable via the implemented
+A3-D and A3-LLM callers, but that rests on caller discipline rather than
+on the enforcement layer, and no regression test proves it. Documenting
+it as an accepted limitation was considered and rejected: the
+gate/executor boundary is the specific thing this project asks a reader
+to trust. It is fixed and tested before freeze.
+
+### What was deliberately NOT changed
+
+- **Criteria 2 and 3, including the comparator tie-set rule, are frozen at
+  `eval-spec-v1.7` (`7fde138`) and are not touched.**
+- **Criterion 1 is not weakened.** Stress remains required and will be
+  wired/run before `code-freeze-holdout`.
+- **Failure injection is not redesigned.** It is already substantially
+  implemented and tested.
+- **`temperature` is not made an evaluation rule.** Existing environment
+  evidence is retained in `results/tuning_log.md` and `LIMITATIONS.md`.
+
+### Verification required before commit
+
+- `git diff --stat` shows `EVAL.md` and `CHANGELOG.md` only.
+- Nothing modified under `src/`, `configs/`, `tests/`, `data/`, `SIM.md`,
+  `docs/A3-DESIGN.md`.
+- `git grep -n "authorized=True"` returns no new call site.
+- `pytest -q` and `ruff check .` unchanged from `26ba176`.
+- No holdout artifact exists.
+
+### Not done in this entry
+
+No `holdout` run. No `stress` run. No sweep. No code — including the
+item-E enforcement fix. No `results/sensitivity.md` regeneration.
+
 ## eval-spec-v1.7 — Holdout comparator tie-set rule (evaluability-defect amendment) — 2026-08-28
 
 `[CONSEQUENTIAL-3]` A NEW CONSEQUENTIAL METHODOLOGICAL DECISION /

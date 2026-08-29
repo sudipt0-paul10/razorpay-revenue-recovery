@@ -569,6 +569,10 @@ construction**, not by a rejected proposal:
   `sim-v1` — see §8 item 8 — and is tested only via synthetic adversarial
   proposals (`docs/A3-DESIGN.md §8`).
 
+> `[INVARIANT, eval-spec-v1.8]` Gate-accepted proposals must have a legal
+> executor mapping; no silent downgrade to WAIT. Full text and motivation
+> at §7.1 item E. Scored under criterion 1.
+
 ### 5.3 Agent reliability
 
 - % actions carrying a machine-readable reason code + rationale: 100% `[INVARIANT]`
@@ -633,8 +637,12 @@ Every run writes `results/<run_id>/manifest.json`: git SHA, spec version, config
 N = 6 dev configurations; A3-D N = 3 dev configurations. The 6 A3-LLM
 configurations are evaluated on the 500-episode subsample (seeds
 1000–1499, below) — **not** full `dev` — to bound tuning cost; only the
-**selected** configuration is subsequently run on full `dev`. Every
-configuration tried, including losing ones, is recorded in
+**selected** configuration is subsequently run on full `dev`.
+
+> `[AMENDMENT, eval-spec-v1.8]` The full-`dev` (N=2,000) confirmation run
+> of the selected A3-LLM configuration was not executed. See §7.1 item B.
+
+Every configuration tried, including losing ones, is recorded in
 `results/tuning_log.md`. Distinct from, and does not relax,
 `configs/model_params.yaml`'s existing `frozen_policies` / "no per-cell
 retuning" rule (locked decision 14): the tuning budget governs a
@@ -651,6 +659,9 @@ additionally evaluated on that same 500-index set for that specific
 comparison** — a separate evaluation of the comparator, not a substitute
 for its own canonical run. A3-D, being deterministic and free, is swept
 at the full `dev` split (N=2,000, all 22 cells).
+
+> `[CORRECTION, eval-spec-v1.8]` "22 cells" throughout this section reads
+> as 26; pass mark 21/26, not 18/22. Membership unchanged. See §7.1 item C.
 
 **A2's canonical full-dev sweep is scheduled as independent,
 deterministic work, not blocked on A3.** `results/sensitivity.md` is
@@ -779,6 +790,146 @@ See `CHANGELOG.md`'s `eval-spec-v1.7` entry for the full record.
 
 ---
 
+### 7.1 Amendments at `eval-spec-v1.8`
+
+Written and committed before any `holdout` index is accessed. No
+`holdout` result exists at the time of this amendment.
+
+**Criteria 2 and 3, including the comparator tie-set rule frozen at
+`eval-spec-v1.7` (`7fde138`), are not modified, restated, or reinterpreted
+by this amendment.** Nothing below weakens any success criterion; items D
+and E declare how criteria 5 and 1 respectively are satisfied, and item E
+adds an invariant.
+
+**A. `[AMENDMENT, eval-spec-v1.8]` Holdout arm set, and the exclusion of
+A3-LLM.**
+
+The single `holdout` run authorized under §3.5 evaluates exactly five
+arms: **A0, A1, A2-strengthened, A3-D, A4.**
+
+**A3-LLM is excluded from `holdout` for one reason: the paid-API budget
+required to run a live planner across 2,000 `holdout` episodes is not
+available.** No replayable cache exists for `holdout` seeds 9000–10999;
+the §6A cache covers `dev` seeds 1000–1499 only. This exclusion is
+declared before any `holdout` access and is not, and may not later be
+represented as, a decision informed by A3-LLM's measured performance.
+
+Consequences, all binding:
+
+- Where §7's criteria say "A3," they are evaluated on `holdout` against
+  **A3-D**. A3-D is the arm subject to criteria 1–4.
+- A3-LLM's Day-6 result — configuration GPT-C2 (`reasoning_effort=minimal`,
+  `disclosure=high`, `verbosity=low`), selected mechanically under §6A's
+  pre-registered selection rule at N=500 on `dev` seeds 1000–1499 — is a
+  **development-only secondary result**. It is not scored against §7.
+- **No `holdout` outcome for A3-LLM may be inferred, extrapolated,
+  estimated, bounded, or projected** — not from its `dev` result, not
+  from A3-D's `holdout` result, not from any combination — in
+  `RESULTS.md`, `README.md`, the architecture document, the pitch, or any
+  other artifact.
+- Every artifact reporting an A3-LLM figure states, adjacent to the
+  number, that it is `dev`-only at N=500 and was never run on `holdout`.
+
+**B. `[AMENDMENT, eval-spec-v1.8]` Two prescribed A3-LLM runs were not
+performed.**
+
+Both are departures from frozen procedure, declared here rather than left
+to be discovered:
+
+1. **The §6A full-`dev` confirmation of the selected configuration was not
+   executed.** §6A prescribes that only the selected configuration "is
+   subsequently run on full `dev`" at N=2,000. GPT-C2 was selected on the
+   500-episode subsample and no N=2,000 run followed, for the budget
+   reason in A. Every reported A3-LLM figure is an N=500 subsample figure
+   and is labelled as such wherever it appears. The selection itself
+   stands: made under the pre-registered rule, on the pre-registered
+   subsample, before this amendment.
+
+2. **The three repeat runs prescribed by §8 item 4 were not executed.**
+   §8 item 4 requires three repeat runs on the 300-episode subsample
+   (`dev` seeds 1000–1299), each writing its own cache
+   (`llm_cache_rep1/2/3.jsonl`), specifically so that repeat-run variance
+   is measured rather than made vacuous by shared-cache replay. No such
+   run was performed, no such cache file exists, and no repeat-run
+   machinery was built.
+
+   **Consequence, stated without softening: this project holds no
+   evidence about A3-LLM's run-to-run nondeterminism.** The pinned model
+   rejects any `temperature` other than `1` (see `results/tuning_log.md`),
+   so §8 item 4's "temperature 0 where supported" clause is satisfied
+   vacuously and carries no determinism guarantee. Cache replay
+   establishes only that a recorded run can be replayed byte-identically,
+   which is true by construction and is not variance evidence. No
+   artifact may describe A3-LLM as reproducible, stable, deterministic,
+   or low-variance, or present its N=500 figure with any implied
+   precision beyond a single observed run. §8 item 4's model-version
+   pinning obligation is unaffected and remains in force.
+
+**C. `[CORRECTION, eval-spec-v1.8]` Sweep cell count: 26, not 22.**
+
+§6A states the sensitivity sweep comprises 22 cells.
+`src/rrx/spec/registry.py::enumerate_cells()`, under the frozen
+`configs/model_params.yaml` with `include_topup_acceleration_cells:
+false`, enumerates **26**, a count asserted and enforced by
+`tests/test_model_params_swept.py`.
+
+**26 is correct; "22" is a stale figure in the prose.** Per §0, the
+registry is the single source of truth for sweep membership. **No
+`[MODEL]` parameter, cell, or perturbation magnitude is added, removed,
+or changed by this correction.** Every occurrence of "22 cells" in §6A is
+read as 26. The `[DESIGN]` 80% threshold is unchanged and therefore
+evaluates to a pass mark of `ceil(0.80 × 26) = 21 / 26`, replacing the
+stale `18 / 22`. `results/sensitivity.md` carries the stale 22-cell
+structure and is regenerated from the registry.
+
+**D. `[AMENDMENT, eval-spec-v1.8]` Criterion 5 is satisfied against a
+stubbed planner, without live API calls.**
+
+Criterion 5's three injected failure modes include two that name an LLM
+fault (API timeout; malformed/hallucinated LLM action). These are
+injected against a **stubbed planner** raising the corresponding fault
+deterministically, not against a live `gpt-5-mini` call. The substitution
+is declared, not assumed.
+
+What this establishes: that the runner, gate, executor and ledger handle
+a malformed, faulting or absent planner output without dropping an
+episode, corrupting budget accounting, or losing ledger visibility —
+which is the property criterion 5 exists to test. What it does not
+establish: the live client's timeout, retry or backoff behaviour against
+the OpenAI endpoint. No artifact may claim the latter.
+
+**E. `[INVARIANT, eval-spec-v1.8]` A gate-accepted proposal must have a
+legal executor mapping.**
+
+Added to the §5.2 invariant set, and therefore scored under criterion 1
+on `dev`, `holdout` and `stress`:
+
+> **No gate-accepted proposal may be executed as anything other than the
+> action it proposes.** If the executor holds no legal mapping for an
+> accepted `(action_type, remedy)` pair — including `CONTACT` with
+> `remedy=None` or an unrecognized remedy — that is an enforcement
+> failure, not a silent downgrade to WAIT. The condition must be detected
+> at the enforcement layer, recorded in the ledger with a distinguishing
+> `fallback_reason`, and counted in the reliability metrics of §5.3.
+
+Motivation: `src/rrx/harness/runner.py` currently routes such a proposal
+into the same catch-all branch as a *gate-rejected* proposal, making
+"the gate said no" and "the gate said yes and nothing happened"
+indistinguishable in the ledger. The path appears unreachable through
+the implemented A3-D and A3-LLM callers — A3-D constructs only valid
+combinations, and the A3-LLM parser rejects invalid remedies before
+`Proposal` construction — but that unreachability rests on caller
+discipline, is not guaranteed by the enforcement layer, and is not
+proved by any regression test.
+
+This is declared as an invariant to be enforced in code, with a
+regression test, **before `code-freeze-holdout`** — not as an accepted
+limitation. Caller-level unreachability is not a substitute for
+enforcement: the gate/executor boundary is the layer this project asks a
+reader to trust, and an untested claim about it is not evidence.
+
+---
+
 ## 8. Threats to validity
 
 1. **We wrote the world the agent competes in.** Simulator frozen
@@ -794,6 +945,12 @@ See `CHANGELOG.md`'s `eval-spec-v1.7` entry for the full record.
    Every headline number is Regime B.
 4. **LLM nondeterminism.** Temperature 0 where supported; 3 repeat runs
    on a 300-episode subsample; model version pinned in every manifest.
+
+   > `[AMENDMENT, eval-spec-v1.8]` The three repeat runs prescribed by this
+   > item were **not executed**, and the temperature clause is satisfied
+   > vacuously because `gpt-5-mini` rejects any value other than `1`. This
+   > project therefore holds no A3-LLM nondeterminism evidence. The
+   > model-version pinning obligation is unaffected. See §7.1 item B.
 5. **Verification limits.** Decline classifications verified against
    three of four cited Razorpay error pages on 25 Aug 2026; the List of
    Errors page is JS-rendered and unreadable. eMandate and UPI
