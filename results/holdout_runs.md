@@ -175,6 +175,26 @@ python scripts/run_holdout.py --i-have-authorized-the-holdout
 
 ---
 
+## SECOND REFUSAL — STRUCTURAL SHA-DRIFT EXPOSED
+
+**Timestamp:** `2026-08-30T03:39:14+05:30`
+
+The authorized invocation of `python scripts/run_holdout.py --i-have-authorized-the-holdout` was attempted again, against `HEAD = ab244f635763c7ae08a5afd96e063ebd831d176b` (the RE-AUTHORIZATION commit above). It was **refused by the same class of guard as the first attempt**:
+
+```
+HEAD is ab244f635763c7ae08a5afd96e063ebd831d176b,
+expected the authorized implementation 53bd1223691f0c1c09cce7bb754f123c3f38f38b.
+```
+
+`scripts/run_holdout.py`'s `IMPLEMENTATION_SHA` constant still said `53bd122` — the value written into it by commit `659b515` — because no commit since `659b515` had updated it, and `ab244f6` (the re-authorization text commit) necessarily became the new HEAD without any such update. **This is not a second, unrelated bug; it is the same structural defect recurring one link further down the same chain**: `86930b2 → 53bd122` (first refusal) → `53bd122 → ab244f6` (this refusal) — a hardcoded literal SHA inside a tracked file can never equal the SHA of a *later* commit, including the commit that corrects the literal itself, so this pattern was guaranteed to repeat for as long as the mechanism remained a hardcoded literal.
+
+**Confirmed: no holdout indices were accessed, no holdout data of any kind was read or written, and no output directory was created.** The refusal occurred at `verify_preconditions()`'s first check, before `holdout_indices(authorized=True)` is ever reached in the script's control flow — the same early-refusal guarantee as the first attempt. `git status --porcelain` immediately after this attempt showed no new or modified files. **No evaluation result of any kind existed before, during, or after this attempt.**
+
+This second refusal is what prompted the Day 8 SHA-drift investigation and the subsequent architectural fix — replacing the hardcoded `IMPLEMENTATION_SHA` literal with (1) a content-based diff check of the evaluation-relevant paths against `code-freeze-holdout`, and (2) a `holdout-authorized-latest` tag resolved dynamically via `git rev-parse` at runtime rather than copied into source. That fix is recorded separately, once implemented and committed; it does not alter, and is not itself, an authorization decision, and it does not change anything recorded in the FINAL AUTHORIZATION DECLARATION or RE-AUTHORIZATION sections above.
+
+---
+
 ## Entries
 
 - `2026-08-30T03:18:06+05:30` | arm=(none — precondition check, no arm reached) | attempt=1 | status=REFUSED | reason=implementation SHA guard mismatch (HEAD 53bd122 vs pinned 86930b2, since corrected in commit 659b515) | holdout data accessed: no
+- `2026-08-30T03:39:14+05:30` | arm=(none — precondition check, no arm reached) | attempt=2 | status=REFUSED | reason=implementation SHA guard mismatch (HEAD ab244f6 vs pinned 53bd122; exposed the self-referential-literal design defect, since replaced by an evaluation-surface diff check + dynamically-resolved holdout-authorized-latest tag) | holdout data accessed: no

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -32,12 +33,25 @@ def _load_run_holdout():
 
 run_holdout = _load_run_holdout()
 
+_DEFAULT_FAKE_HEAD = "cccccccccccccccccccccccccccccccccccccc"
 
-def _make_fake_git(*, head=None, freeze=None, spec=None, status=""):
-    """Builds a fake `_git(*args)` matching run_holdout's own call shape."""
-    head = head or run_holdout.IMPLEMENTATION_SHA
+
+def _make_fake_git(
+    *, head=None, freeze=None, spec=None, status="",
+    surface_diff="", auth_tag_target=None, auth_tag_missing=False,
+):
+    """Builds a fake `_git(*args)` matching run_holdout's own call shape.
+
+    Defaults represent the fully-passing case post-fix: an arbitrary HEAD
+    (no longer required to equal any hardcoded literal - that mechanism no
+    longer exists), an empty evaluation-surface diff, and the
+    holdout-authorized-latest tag resolving to that same HEAD.
+    """
+    head = head or _DEFAULT_FAKE_HEAD
     freeze = freeze or run_holdout.CODE_FREEZE_HOLDOUT_SHA
     spec = spec or run_holdout.EVAL_SPEC_V1_10_SHA
+    auth_tag_target = head if auth_tag_target is None else auth_tag_target
+    auth_tag_rev = f"{run_holdout.AUTHORIZATION_TAG_NAME}^{{}}"
 
     def _fake_git(*args):
         if args == ("rev-parse", "HEAD"):
@@ -48,6 +62,16 @@ def _make_fake_git(*, head=None, freeze=None, spec=None, status=""):
             return spec
         if args == ("status", "--porcelain"):
             return status
+        if (
+            len(args) >= 4
+            and args[0] == "diff"
+            and args[1:4] == ("code-freeze-holdout", "HEAD", "--")
+        ):
+            return surface_diff
+        if args == ("rev-parse", auth_tag_rev):
+            if auth_tag_missing:
+                raise subprocess.CalledProcessError(128, ["git", *args])
+            return auth_tag_target
         raise AssertionError(f"unexpected _git call: {args}")
 
     return _fake_git
@@ -90,42 +114,86 @@ def test_refuses_on_dirty_working_tree(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 3. Refusal on the wrong HEAD
+# 3. The self-referential SHA pin is gone; replaced by an evaluation-
+#    surface content check + a dynamically-resolved authorization tag.
+#    (Day 8 SHA-drift investigation - see scripts/run_holdout.py's own
+#    "REMOVED" comment for the full history of why.)
 # ---------------------------------------------------------------------------
 
-def test_refuses_on_wrong_head(monkeypatch, tmp_path):
-    monkeypatch.setattr(run_holdout, "_git", _make_fake_git(head="0" * 40))
-    monkeypatch.setattr(run_holdout, "holdout_indices", _boom_if_called("holdout_indices"))
-    monkeypatch.setattr(run_holdout, "run_official_arm", _boom_if_called("run_official_arm"))
-    monkeypatch.setattr(run_holdout, "HOLDOUT_OUTPUT_ROOT", tmp_path / "holdout-out")
-
-    exit_code = run_holdout.main(["--i-have-authorized-the-holdout"])
-
-    assert exit_code == 1
+def test_no_hardcoded_implementation_sha_remains():
+    """Task 6 item 1. The exact mechanism that caused two consecutive
+    refused authorized invocations (86930b2 -> 53bd122 -> ab244f6, each
+    fix immediately staled by its own commit) must not exist in any form."""
+    assert not hasattr(run_holdout, "IMPLEMENTATION_SHA")
 
 
-def test_rejects_old_authorized_implementation_sha_and_accepts_current_one(monkeypatch):
-    """Regression test for the Day 8 SHA-mismatch incident: the runner was
-    pinned to 86930b2 (HEAD when the script was written) while the actual
-    §C1 authorization declaration (results/holdout_runs.md, anchored by
-    the holdout-authorized-20260830 tag) names 53bd122 as the authorized
-    implementation SHA. The first authorized invocation was correctly
-    refused by this exact mismatch - proving the guard works - and this
-    test pins both directions so a future edit cannot silently reintroduce
-    a stale pin: the OLD sha must still be rejected, and the CURRENT
-    IMPLEMENTATION_SHA constant (whatever it is pinned to) must be
-    accepted at the precondition-check level."""
-    old_authorized_sha = "86930b2bdd87f997f0dab2fe6df6a17ba8b69cb7"
-    assert run_holdout.IMPLEMENTATION_SHA != old_authorized_sha, (
-        "IMPLEMENTATION_SHA still equals the known-stale SHA from the "
-        "mismatch incident - the fix was not actually applied"
+def test_evaluation_surface_paths_are_exactly_the_declared_list():
+    """Pins the exact path list this fix is scoped to - not silently
+    broadened or narrowed (per the task's explicit instruction)."""
+    assert run_holdout.EVALUATION_SURFACE_PATHS == (
+        "EVAL.md",
+        "SIM.md",
+        "configs/",
+        "data/",
+        "src/rrx/sim/",
+        "src/rrx/agent/",
+        "src/rrx/features/",
     )
 
-    monkeypatch.setattr(run_holdout, "_git", _make_fake_git(head=old_authorized_sha))
-    with pytest.raises(run_holdout.PreflightError, match=old_authorized_sha):
+
+def test_authorization_tag_name_is_holdout_authorized_latest():
+    assert run_holdout.AUTHORIZATION_TAG_NAME == "holdout-authorized-latest"
+
+
+def test_refuses_when_evaluation_surface_has_drifted(monkeypatch):
+    """Task 6 item 2. A real change under EVALUATION_SURFACE_PATHS since
+    code-freeze-holdout must be refused, regardless of what HEAD is."""
+    monkeypatch.setattr(
+        run_holdout, "_git",
+        _make_fake_git(surface_diff="diff --git a/EVAL.md b/EVAL.md\n+ a real change\n"),
+    )
+    with pytest.raises(run_holdout.PreflightError, match="Evaluation-relevant paths differ"):
         run_holdout.verify_preconditions()
 
-    monkeypatch.setattr(run_holdout, "_git", _make_fake_git())  # defaults to the current pin
+
+def test_accepts_documentation_only_commits_despite_head_advancing(monkeypatch):
+    """Task 6 item 3. This is the actual fix, directly demonstrated: HEAD
+    is an arbitrary value that matches no historical literal whatsoever
+    (unlike every SHA seen in the Day 8 chain), the evaluation-surface
+    diff against code-freeze-holdout is empty (as it always has been for
+    every real Day 8 provenance/tooling commit), and the authorization tag
+    is set to resolve to that same arbitrary HEAD. verify_preconditions()
+    must not raise - proving future documentation-only commits will never
+    need another edit to this script."""
+    arbitrary_head = "1234567890abcdef1234567890abcdef12345678"
+    monkeypatch.setattr(
+        run_holdout, "_git",
+        _make_fake_git(head=arbitrary_head, surface_diff=""),  # tag defaults to matching head
+    )
+    run_holdout.verify_preconditions()  # must not raise
+
+
+def test_refuses_when_authorization_tag_missing(monkeypatch):
+    """Task 6 item 4."""
+    monkeypatch.setattr(run_holdout, "_git", _make_fake_git(auth_tag_missing=True))
+    with pytest.raises(run_holdout.PreflightError, match="does not exist"):
+        run_holdout.verify_preconditions()
+
+
+def test_refuses_when_authorization_tag_points_elsewhere(monkeypatch):
+    """Task 6 item 5."""
+    other_commit = "9999999999999999999999999999999999999999"
+    monkeypatch.setattr(
+        run_holdout, "_git",
+        _make_fake_git(head=_DEFAULT_FAKE_HEAD, auth_tag_target=other_commit),
+    )
+    with pytest.raises(run_holdout.PreflightError, match="does not name the current commit"):
+        run_holdout.verify_preconditions()
+
+
+def test_accepts_when_authorization_tag_matches_head_exactly(monkeypatch):
+    """Task 6 item 6."""
+    monkeypatch.setattr(run_holdout, "_git", _make_fake_git())  # tag == head by default
     run_holdout.verify_preconditions()  # must not raise
 
 

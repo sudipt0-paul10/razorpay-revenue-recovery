@@ -12,8 +12,14 @@ What this script does:
     refuses immediately, before touching git, the filesystem, or the
     holdout index range at all.
   - Re-verifies, at the moment of execution (not just at the last
-    preflight pass): HEAD, the code-freeze-holdout and eval-spec-v1.10
-    tags, and a clean working tree.
+    preflight pass): the code-freeze-holdout and eval-spec-v1.10 tags, a
+    clean working tree, that the evaluation-relevant paths are
+    byte-identical to code-freeze-holdout (EVALUATION_SURFACE_PATHS
+    below - NOT a whole-repo HEAD-equals-a-literal-SHA check; see the Day
+    8 SHA-drift investigation for why that mechanism was removed), and
+    that the `holdout-authorized-latest` tag - resolved dynamically via
+    git at runtime, never a hardcoded SHA literal - names the current
+    HEAD exactly.
   - Refuses to start if any of the five arms' output directories already
     exist (complete or partial) under this implementation's holdout
     output root.
@@ -85,37 +91,66 @@ from rrx.eval.arms import (  # noqa: E402
 from rrx.harness.splits import HoldoutNotAuthorizedError, holdout_indices  # noqa: E402
 from rrx.sim.engine import MASTER_SEED  # noqa: E402
 
-# Pinned to the exact implementation this script is authorized to run
-# under. Updating these three constants is itself a reviewed change to
-# make deliberately if a later provenance-fixing commit supersedes this
-# state - never silently, and never as part of carrying out a holdout
-# attempt.
-#
-# IMPLEMENTATION_SHA must equal whatever commit the CURRENT §C1
-# authorization declaration (results/holdout_runs.md, "FINAL
-# AUTHORIZATION DECLARATION" section) names as its Implementation SHA -
-# not whatever HEAD happened to be when this script was last edited.
-#
-# Corrected 86930b2 -> 53bd122 (Day 8 SHA-mismatch fix): this script was
-# originally written against 86930b2 (HEAD at the time), but the
-# authorization declaration committed afterward - itself a new commit,
-# `53bd1223691f0c1c09cce7bb754f123c3f38f38b`, "Authorize Day 8 holdout
-# evaluation" - names 53bd122 as the authorized implementation SHA and is
-# anchored by the annotated tag `holdout-authorized-20260830`. The first
-# authorized invocation was correctly refused by this exact mismatch
-# (HEAD 53bd122 != the then-pinned 86930b2) - the guard did its job; this
-# is the deliberate, reviewed correction to the pinned constant, not a
-# weakening of the check itself.
-IMPLEMENTATION_SHA = "53bd1223691f0c1c09cce7bb754f123c3f38f38b"
+# Pinned to the two frozen evaluation anchors. Updating either of these
+# two constants is itself a reviewed change to make deliberately if the
+# freeze itself is ever superseded - never silently, and never as part
+# of carrying out a holdout attempt. Neither constant has ever needed to
+# change in the SHA-drift history below, because both are checked
+# against tags (stable, extended by moving/creating a ref) rather than
+# by copying a moving HEAD into source.
 CODE_FREEZE_HOLDOUT_SHA = "4d45db461943978637673a5611a429e0fe826065"
 EVAL_SPEC_V1_10_SHA = "125eae8841562f6d5eccab58e055400340e71af6"
 
+# REMOVED (Day 8 SHA-drift investigation): a third constant,
+# IMPLEMENTATION_SHA, used to hardcode a literal HEAD value this script
+# was "authorized to run under" and require exact HEAD equality. That
+# mechanism is structurally unsound: writing "the authorized commit is X"
+# into a tracked file makes X the PARENT of the resulting commit, never
+# the commit itself - so any commit made after the pin (including the
+# very commit that corrects the pin, and any later authorization-text
+# update) leaves the literal one step stale by construction. This
+# recurred twice (86930b2 -> 53bd122 -> ab244f6, each refusal correctly
+# caught by the guard, each "fix" immediately staled by the fix's own
+# commit) before being replaced here by two checks that do not have this
+# problem: EVALUATION_SURFACE_PATHS (content-based, stable across any
+# commit that doesn't touch what actually determines validity) and
+# AUTHORIZATION_TAG_NAME (tag-based, resolved fresh at runtime - a tag
+# can be moved to point at a newly-created commit without touching this
+# file, unlike a literal).
+
+# The paths that actually determine evaluation validity - exactly the
+# list identified by the Day 8 SHA-drift investigation. Not silently
+# broadened or narrowed; any change to this list is itself a reviewed
+# edit to this file, same as the two SHA constants above.
+EVALUATION_SURFACE_PATHS: tuple[str, ...] = (
+    "EVAL.md",
+    "SIM.md",
+    "configs/",
+    "data/",
+    "src/rrx/sim/",
+    "src/rrx/agent/",
+    "src/rrx/features/",
+)
+
+# Resolved dynamically via `git rev-parse "<name>^{}"` at runtime - never
+# a hardcoded commit SHA. Moving this tag to point at a new authorization
+# commit (docs/DAY8-HOLDOUT-PLAN.md §C) never requires editing this file.
+# The uniquely-dated/suffixed tags (holdout-authorized-20260830,
+# -20260830-corrected, ...) remain the immutable, append-only audit trail
+# of every authorization event; this one name is the single thing this
+# script reads, and it is expected to be moved to the latest such tag's
+# commit as the last step of each (re-)authorization.
+AUTHORIZATION_TAG_NAME = "holdout-authorized-latest"
+
 HOLDOUT_LOG_PATH = REPO_ROOT / "results" / "holdout_runs.md"
-# Namespaced by implementation SHA (not by an invocation date this script
-# cannot know in advance) so "does this output directory already contain
-# a completed run for this implementation SHA" (requirement 3) is answered
-# by the directory's own location, not a separately-tracked lookup.
-HOLDOUT_OUTPUT_ROOT = REPO_ROOT / "results" / "holdout" / IMPLEMENTATION_SHA[:12]
+# Namespaced by the FROZEN EVALUATION SURFACE's identity
+# (code-freeze-holdout), not by whatever HEAD happens to be at execution
+# time - HEAD legitimately advances across provenance/tooling/
+# authorization commits that never touch EVALUATION_SURFACE_PATHS, and
+# runs produced under the same unchanged evaluation surface belong under
+# the same output root regardless of which of those commits executed
+# them.
+HOLDOUT_OUTPUT_ROOT = REPO_ROOT / "results" / "holdout" / CODE_FREEZE_HOLDOUT_SHA[:12]
 
 HOLDOUT_SPLIT = "holdout"
 
@@ -142,19 +177,55 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
+def verify_evaluation_surface_unchanged() -> None:
+    """The "has anything that matters changed" check - content-based, not
+    a whole-repo commit-SHA equality check. HEAD legitimately advances
+    past code-freeze-holdout for pure provenance/tooling/authorization
+    reasons (every commit in this project's Day 8 history does); this
+    check passes through all of those, and fails only if EVALUATION_
+    SURFACE_PATHS themselves actually differ from the frozen freeze
+    point - which is the only kind of change that should ever block
+    execution here."""
+    diff = _git("diff", "code-freeze-holdout", "HEAD", "--", *EVALUATION_SURFACE_PATHS)
+    if diff:
+        raise PreflightError(
+            "Evaluation-relevant paths differ from code-freeze-holdout - "
+            "refusing to run against a drifted evaluation surface:\n" + diff
+        )
+
+
+def verify_authorization_tag() -> None:
+    """Resolves AUTHORIZATION_TAG_NAME via git AT RUNTIME - never a
+    hardcoded SHA literal (the exact mechanism the Day 8 SHA-drift
+    investigation found structurally unsound). Requires the tag to exist
+    and to name the CURRENT HEAD exactly - not merely an ancestor of it -
+    a deliberate choice for Day 8 so the authorization state is
+    unambiguous: this is the moving pointer a human re-anchors (by
+    creating/moving the tag) as the last step of every (re-)authorization,
+    never by editing this file."""
+    try:
+        authorized_commit = _git("rev-parse", f"{AUTHORIZATION_TAG_NAME}^{{}}")
+    except subprocess.CalledProcessError as exc:
+        raise PreflightError(
+            f"Authorization tag {AUTHORIZATION_TAG_NAME!r} does not exist or does not "
+            "resolve to a commit. Refusing to run without a current authorization pointer."
+        ) from exc
+
+    head = _git("rev-parse", "HEAD")
+    if authorized_commit != head:
+        raise PreflightError(
+            f"{AUTHORIZATION_TAG_NAME} resolves to {authorized_commit}, but HEAD is "
+            f"{head}. Refusing to run: the authorization pointer does not name the "
+            "current commit."
+        )
+
+
 def verify_preconditions() -> None:
     """Re-verifies, at the moment of execution, the same repository-state
     facts §B1 already checked at the last preflight pass: this is not a
     substitute for §B, it is the belt to that suspenders - preflight could
     have passed minutes or days before this invocation, and the tree could
     have drifted since. Raises PreflightError on the first failure."""
-    head = _git("rev-parse", "HEAD")
-    if head != IMPLEMENTATION_SHA:
-        raise PreflightError(
-            f"HEAD is {head}, expected the authorized implementation "
-            f"{IMPLEMENTATION_SHA}. Refusing to run against a different SHA."
-        )
-
     freeze_sha = _git("rev-parse", "code-freeze-holdout^{commit}")
     if freeze_sha != CODE_FREEZE_HOLDOUT_SHA:
         raise PreflightError(
@@ -176,6 +247,9 @@ def verify_preconditions() -> None:
             "Refusing to run a holdout attempt against an uncommitted/dirty tree."
         )
 
+    verify_evaluation_surface_unchanged()
+    verify_authorization_tag()
+
 
 def verify_no_existing_run_directories(
     output_root: Path, arms: tuple[str, ...] = HOLDOUT_ARMS
@@ -194,7 +268,7 @@ def verify_no_existing_run_directories(
     if existing:
         raise PreflightError(
             "Refusing to start: the following output directories already "
-            "exist for this implementation SHA:\n"
+            "exist for this frozen evaluation surface:\n"
             + "\n".join(f"  {p}" for p in existing)
             + "\nRemove or relocate them deliberately, as a reviewed human "
             "action under the committed retry policy, before re-running."
@@ -203,9 +277,12 @@ def verify_no_existing_run_directories(
 
 def _append_session_start_log(indices_n: int) -> None:
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    head = _git("rev-parse", "HEAD")
     entry = (
         f"\n## Holdout execution session started — {timestamp}\n\n"
-        f"- Implementation SHA: {IMPLEMENTATION_SHA}\n"
+        f"- Executing commit (HEAD): {head}\n"
+        f"- Authorization tag: {AUTHORIZATION_TAG_NAME}\n"
+        f"- Frozen implementation anchor: code-freeze-holdout ({CODE_FREEZE_HOLDOUT_SHA})\n"
         f"- Spec version: eval-spec-v1.10 ({EVAL_SPEC_V1_10_SHA})\n"
         f"- Split: {HOLDOUT_SPLIT} | N: {indices_n} | Master seed: {MASTER_SEED}\n"
         f"- Arms, execution order: {', '.join(HOLDOUT_ARMS)}\n"
