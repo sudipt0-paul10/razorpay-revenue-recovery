@@ -26,3 +26,10 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Per-episode audit ledgers and LLM caches are run outputs, not source
+# (docs/A3-DESIGN.md §22). manifest.json / metrics.json / run_params.json
+# and aggregate results (results/sensitivity.md, results/tuning_log.md)
+# are NOT covered by this rule and remain committed per that section.
+results/**/ledger.jsonl
+results/**/llm_cache*.jsonl

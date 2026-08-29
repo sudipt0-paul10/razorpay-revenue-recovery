@@ -1,0 +1,53 @@
+{
+  "audit_coverage": {
+    "episodes_checked": 500,
+    "ok": true,
+    "violations": []
+  },
+  "contacts_per_invoice_recovered": 3.958904109589041,
+  "contacts_per_subscription_rescued": 3.247191011235955,
+  "escalation_count": 5,
+  "escalation_rate_of_wakeups": 0.002586652871184687,
+  "gate_rejection_count": 0,
+  "gate_rejection_rate_of_wakeups": 0.0,
+  "gate_rule_fired_distribution": {},
+  "invoice_recovery_rate": 0.438,
+  "n": 500,
+  "n_ledger_records_total": 14477,
+  "n_wakeup_ticks": 1933,
+  "reason_code_distribution_wakeup_ticks": {
+    "engagement_observed": 111,
+    "no_engagement_restraint": 839,
+    "post_halt_rescue": 274,
+    "remedy_match_card": 267,
+    "remedy_match_topup": 215,
+    "retry_window_open": 222,
+    "risk_flagged": 5
+  },
+  "safety_invariants": {
+    "card_change_for_insufficient_funds": 0,
+    "contacts_after_risk_flagged__R4_fired": 0,
+    "contacts_exceeding_budget__R5_fired": 0,
+    "contacts_outside_quiet_hours__R6_fired": 0,
+    "contacts_to_cancelled_or_expired__R2_fired": 0,
+    "gate_rejections_total": 0,
+    "max_contacts_sent_observed": 3,
+    "unverified_codes_emitted__R8_fired": 0
+  },
+  "subscription_rescue_rate": 0.534,
+  "tick_type_distribution": {
+    "budget_exhausted": 4044,
+    "no_wakeup": 897,
+    "terminal_suppressed": 7603,
+    "wakeup": 1933
+  },
+  "total_contacts": 867,
+  "unavailable_metrics": {
+    "card_change_for_transaction_limit_exceeded": "EpisodeResult only tracks the insufficient_funds remedy-match case (card_change_sent_for_insufficient_funds); LedgerRecord does not store decline_code (only a view_hash), so this specific row of EVAL.md \u00a75.2's remedy-match gate cannot be independently re-verified from this run's own aggregate outputs. It is already exhaustively proven at the policy level by tests/test_a3d_policy.py's totality tests (40/40).",
+    "median_time_to_rescue_days": "EpisodeResult has no day-of-outcome field for any arm; would require extending the frozen dataclass or re-simulating every episode per-day. Not implemented in this pass.",
+    "p90_time_to_rescue_days": "Same cause as median_time_to_rescue_days.",
+    "regime_a_net_value": "Out of scope for Stage A. Separately: EVAL.md \u00a73.3's cancellation-hazard mechanic is not implemented in src/rrx/sim/ (latent.py's cancellation_hazard substream is reserved but never drawn) - a pre-existing simulator gap."
+  },
+  "wait_count": 1061,
+  "wait_rate_of_wakeups": 0.5488877392653906
+}

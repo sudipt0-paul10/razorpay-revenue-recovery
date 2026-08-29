@@ -42,6 +42,45 @@ Day-loop contract, per day D (docs/A3-DESIGN.md §3):
      (no mutation of `state`/`view`/`proposal`) - wiring them in changes
      nothing about the mutating steps 1/6/7/8, which is what
      tests/test_a3_runner_parity.py depends on.
+
+Day 6 Stage 6B addition - gate-rejection fallback hook (docs/A3-DESIGN.md
+§11: "Gate rejection → fallback: fallback_reason=gate_rejected... its
+proposal executes through the same gate/executor"). Inserted between
+steps 5 and 6: if `gate(proposal, view)` rejects, `rrx.agent.policy.
+a3d_policy` (UNMODIFIED) is re-invoked on the SAME `view`, and ITS
+proposal is re-gated through the SAME `gate` call before the executor
+runs. The ledger's `proposal`/`gate_verdict`/`gate_rule_fired` fields
+still record the ORIGINAL (rejected) proposal - the audit-relevant fact
+of what was proposed and why it was refused - while `executed_action`
+reflects what the fallback actually did and the new `fallback_reason`
+field marks that a fallback occurred. This hook is generic at the runner
+level, not arm-conditioned: for a3d_policy itself it is provably dead
+code (tests/test_a3d_policy.py's exhaustive gate-compliance proof already
+shows a3d_policy's own proposals are accepted over its entire reachable
+input space, so `not gate_verdict.accepted` never evaluates True when
+`policy is a3d_policy`) - A3-D's behavior is therefore unchanged by this
+addition. Only a policy capable of producing a gate-rejected proposal
+(A3-LLM) can ever reach this branch. `stale_state` (§11's other
+gate-adjacent fallback reason) is NOT implemented here: sim-v1's day loop
+is single-threaded and fully synchronous - `view` is built once (step 2)
+and consumed by `policy` and `gate` in the same call stack with no
+intervening tick - so there is no mechanism by which `state.
+subscription_state` could change between view-construction and
+gate-evaluation. Genuinely unreachable under this architecture, not
+implemented, not simulated.
+
+Day 6 Stage 6B closure - planner-layer fallback auditability. Before this,
+a timeout/unparseable/schema_violation fallback (resolved entirely inside
+rrx.agent.planner, before this module ever sees a Proposal) was invisible
+to the ledger: `policy(view)` returns only a Proposal, so the runner had
+no way to learn that Proposal was itself already a fallback. Fixed by
+`getattr(policy, "last_fallback_reason", None)` immediately after the
+policy call - a3d_policy (a bare function) has no such attribute, so this
+is always None for A3-D; rrx.agent.planner.A3LLMPolicy (a callable object)
+sets it on every call. No change to PolicyFn's shape - still exactly
+`Callable[[EpisodeView], Proposal]` - and no new LedgerRecord field: the
+existing `fallback_reason` column is simply populated from one more
+source than before.
 """
 
 from __future__ import annotations
@@ -50,6 +89,7 @@ from typing import Any, Callable
 
 from rrx.agent.gate import GateVerdict, evaluate_gate
 from rrx.agent.ledger import default_ledger_record
+from rrx.agent.policy import a3d_policy
 from rrx.agent.proposal import Proposal
 from rrx.features.episode_view import EpisodeView
 from rrx.sim.cohort import sample_cohort_episode
@@ -185,6 +225,20 @@ def run_episode_a3(
         gate_verdict: GateVerdict | None = None
         executed_action: dict[str, str] | None = None
         contact_sent_this_tick = False
+        fallback_reason: str | None = None
+        # Day 6 Stage 6C: declared here (not just inside the wakeup branch)
+        # because step 9's ledger_record call below runs on EVERY tick,
+        # wakeup or not - these must have a defined, ledger-correct default
+        # (matching default_ledger_record's own defaults exactly) on a
+        # non-wakeup tick too.
+        planner_raw_output: str | None = None
+        planner_prompt_hash: str | None = None
+        planner_model_version: str | None = None
+        planner_template_version: str | None = None
+        planner_latency_ms: float | None = None
+        planner_tokens_in: int | None = None
+        planner_tokens_out: int | None = None
+        planner_cost: float = 0.0
 
         if tick_type == TICK_WAKEUP:
             last_wake_history_len = len(view.contact_history)
@@ -193,9 +247,60 @@ def run_episode_a3(
             # --- step 5: gate (§8's R1-R8, real precedence-ordered check) ---
             gate_verdict = gate(proposal, view)
 
+            # --- Day 6 Stage 6B closure: planner-layer fallback
+            # auditability. `policy` is still a plain (EpisodeView) ->
+            # Proposal callable (PolicyFn is unchanged) - a3d_policy is a
+            # bare function and has no such attribute, so this is None for
+            # every A3-D call, always. rrx.agent.planner.A3LLMPolicy (what
+            # make_a3_llm_policy now returns) is a callable OBJECT that
+            # additionally records its own most recent
+            # timeout/unparseable/schema_violation resolution as an
+            # attribute, precisely so the runner - which only ever sees
+            # the single Proposal a PolicyFn call returns - can recover
+            # that provenance for the ledger without changing what a
+            # PolicyFn is.
+            #
+            # Day 6 Stage 6C (6C-1/6C-7): the same getattr mechanism now
+            # also recovers every other §14 LLM-only ledger column
+            # A3LLMPolicy exposes. Every default below matches
+            # default_ledger_record's own default exactly, so a
+            # bare-function policy (a3d_policy, null_policy, any test
+            # policy) leaves every one of these None/0.0, unchanged from
+            # before this addition.
+            planner_fallback_reason = getattr(policy, "last_fallback_reason", None)
+            planner_raw_output = getattr(policy, "last_raw_output", None)
+            planner_prompt_hash = getattr(policy, "last_prompt_hash", None)
+            planner_model_version = getattr(policy, "last_model_version", None)
+            planner_template_version = getattr(policy, "last_template_version", None)
+            planner_latency_ms = getattr(policy, "last_latency_ms", None)
+            planner_tokens_in = getattr(policy, "last_tokens_in", None)
+            planner_tokens_out = getattr(policy, "last_tokens_out", None)
+            planner_cost = getattr(policy, "last_cost_inr", 0.0)
+
+            # --- gate-rejection fallback hook (see module docstring).
+            # `exec_proposal`/`exec_gate_verdict` are what the executor
+            # below acts on; `proposal`/`gate_verdict` (the ORIGINAL
+            # decision) are still what step 9 logs, unchanged. A
+            # gate-level rejection is a strictly later, independent
+            # failure mode from a planner-layer one (and can only ever
+            # apply to a proposal a planner-layer fallback did NOT already
+            # produce - a3d_policy's own output is gate-compliant by
+            # construction, so if `planner_fallback_reason` is set here,
+            # `gate_verdict.accepted` is always True) - "gate_rejected"
+            # therefore always takes precedence when both could
+            # apply, with no actual case where both do. ---
+            if gate_verdict.accepted:
+                exec_proposal, exec_gate_verdict = proposal, gate_verdict
+                fallback_reason = planner_fallback_reason
+            else:
+                fallback_reason = "gate_rejected"
+                fallback_proposal = a3d_policy(view)
+                exec_proposal = fallback_proposal
+                exec_gate_verdict = gate(fallback_proposal, view)
+
             # --- step 6: executor ---
-            if gate_verdict.accepted and proposal.action_type == "CONTACT" and (
-                proposal.remedy == "card_change"
+            if exec_gate_verdict.accepted and exec_proposal.action_type == "CONTACT" and (
+                exec_proposal.remedy == "card_change"
             ):
                 _send_message(
                     state, day=day, channel=AGENT_CHANNEL, names_card=True, names_dues=False,
@@ -205,8 +310,8 @@ def run_episode_a3(
                     state.card_change_sent_for_insufficient_funds = True
                 contact_sent_this_tick = True
                 executed_action = {"action_type": "CONTACT", "remedy": "card_change"}
-            elif gate_verdict.accepted and proposal.action_type == "CONTACT" and (
-                proposal.remedy == "topup_reminder"
+            elif exec_gate_verdict.accepted and exec_proposal.action_type == "CONTACT" and (
+                exec_proposal.remedy == "topup_reminder"
             ):
                 _send_message(
                     state, day=day, channel=AGENT_CHANNEL, names_card=False, names_dues=True,
@@ -214,12 +319,15 @@ def run_episode_a3(
                 )
                 contact_sent_this_tick = True
                 executed_action = {"action_type": "CONTACT", "remedy": "topup_reminder"}
-            elif gate_verdict.accepted and proposal.action_type == "STOP":
+            elif exec_gate_verdict.accepted and exec_proposal.action_type == "STOP":
                 episode_stopped = True
                 executed_action = {"action_type": "STOP"}
             else:
-                # WAIT, or a rejected/otherwise-unexecutable proposal: no
-                # state mutation (§3 step 6; §9's executor table).
+                # WAIT, a rejected/otherwise-unexecutable proposal, or (in
+                # principle unreachable, per the module docstring's
+                # gate-compliance proof) even the fallback itself being
+                # rejected: no state mutation (§3 step 6; §9's executor
+                # table).
                 executed_action = {"action_type": "WAIT"}
 
         # --- step 7: retry check - identical to engine.py:479-482 ---
@@ -250,6 +358,15 @@ def run_episode_a3(
             budget_before=budget_before,
             budget_after=budget_after,
             contact_sent=contact_sent_this_tick,
+            fallback_reason=fallback_reason,
+            prompt_hash=planner_prompt_hash,
+            raw_output=planner_raw_output,
+            latency_ms=planner_latency_ms,
+            tokens_in=planner_tokens_in,
+            tokens_out=planner_tokens_out,
+            cost=planner_cost,
+            model_version=planner_model_version,
+            template_version=planner_template_version,
         )
 
         if capture_view_at_day is not None and day == capture_view_at_day:

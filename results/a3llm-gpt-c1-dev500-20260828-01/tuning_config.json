@@ -1,0 +1,45 @@
+{
+  "cache_key_temperature_value": 1.0,
+  "cache_size": 1291,
+  "config_id": "GPT-C1",
+  "cost_field_is_not_actual_zero_spend": true,
+  "dev_index_end": 1499,
+  "dev_index_start": 1000,
+  "dev_split": "dev",
+  "disclosure": "low",
+  "episodes_completed": 500,
+  "episodes_requested": 500,
+  "estimated_paid_equivalent_usd": 0.33969174999999996,
+  "latency_ms_min_mean_max": [
+    1327.9542999807745,
+    2257.5703927967375,
+    16310.636600013822
+  ],
+  "ledger_cost_field_value_inr": 0.0,
+  "methodology_source": "results/tuning_log.md Entry 2 (GPT-native six-cell matrix) - UNCOMMITTED as of this script's authorship; see git status",
+  "model": "gpt-5-mini",
+  "provider": "openai",
+  "quota_stop": null,
+  "reasoning_effort": "minimal",
+  "spec_version": "eval-spec-v1.7",
+  "status": "complete",
+  "temperature_forwarded_to_api": false,
+  "template_version": "a3-llm-prompt-v1",
+  "timestamp": "2026-08-29T00:14:45+05:30",
+  "tokens_in_min_mean_max": [
+    385,
+    402.4965143299768,
+    441
+  ],
+  "tokens_in_total": 519623,
+  "tokens_out_min_mean_max": [
+    64,
+    81.24941905499612,
+    113
+  ],
+  "tokens_out_total": 104893,
+  "total_live_calls": 1291,
+  "total_wakeup_ticks": 1291,
+  "verbosity": "low",
+  "wall_clock_seconds": 2919.571184100001
+}

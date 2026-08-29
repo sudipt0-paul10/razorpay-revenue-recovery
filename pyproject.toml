@@ -15,7 +15,17 @@ dev = ["pytest>=8", "ruff>=0.6"]
 # ::test_guard_is_offline asserts razorpay is absent from sys.modules; if the
 # SDK were installed by default that assertion would weaken from "cannot be
 # imported" to "happens not to be imported". CI installs [dev] only.
-live = ["razorpay>=1.4"]
+# google-genai (Day 6 Stage 6D): same rationale - src/rrx/agent/gemini_client.py
+# is the only module that imports it, and only inside its complete() method,
+# so the rest of the package (including every offline test) never needs it
+# installed. Not the deprecated google-generativeai package (EOL 2025-11-30).
+# openai (Day 6 Stage 6I): same rationale again - src/rrx/agent/openai_client.py
+# is the only module that imports it, only inside its complete() method.
+# Pinned to the version already verified installed for the Stage 6G.1/6I
+# empirical probes (openai==3.5.0), not a loose floor - see
+# tests/test_openai_client_offline.py for the offline-only mock coverage
+# that exercises this SDK's actual installed API surface.
+live = ["razorpay>=1.4", "google-genai>=1.0", "openai==3.5.0"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

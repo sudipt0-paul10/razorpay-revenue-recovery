@@ -11,11 +11,26 @@ ledger.jsonl (§22) is run-orchestration infrastructure that does not
 exist yet and is out of scope here; `to_json_line` is provided for when
 it does.
 
-No A3-LLM exists in this pass, so every LLM-only field
-(prompt_hash, raw_output, latency_ms, tokens_in, tokens_out,
-model_version, template_version) is always null, `fallback_reason` is
-always null (no fallback mechanism exists yet), and `cost` is always
-0.0 - "never omitted" per §17, matching A3-D's own applicability column.
+A3-D calls this with none of the LLM-only keyword arguments below
+supplied, so it still gets every LLM-only field null and `cost=0.0` -
+"never omitted" per §17, matching A3-D's own applicability column -
+exactly as before Stage 6C.
+
+Day 6 Stage 6B: `fallback_reason` is an optional caller-supplied
+parameter (default None) rather than a hardcoded constant.
+
+Day 6 Stage 6C (6C-1/6C-7): the remaining LLM-only fields - `prompt_hash`,
+`raw_output`, `latency_ms`, `tokens_in`, `tokens_out`, `cost`,
+`model_version`, `template_version` - are likewise now optional
+caller-supplied parameters instead of hardcoded constants. Every default
+still matches the pre-6C hardcoded value exactly (None for all of them
+except `cost`, which stays 0.0), so any call site that predates this
+change - and A3-D's call site, always - is byte-for-byte unaffected.
+`src/rrx/harness/runner.py` is the only caller that now supplies
+non-default values, and only for a policy that exposes them (see
+`rrx.agent.planner.A3LLMPolicy`). None of this changes §14's 22-field
+schema - every one of these columns already existed; only their wiring
+changed.
 """
 
 from __future__ import annotations
@@ -78,13 +93,25 @@ def default_ledger_record(
     budget_before: int,
     budget_after: int,
     contact_sent: bool,
+    fallback_reason: str | None = None,
+    prompt_hash: str | None = None,
+    raw_output: str | None = None,
+    latency_ms: float | None = None,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
+    cost: float = 0.0,
+    model_version: str | None = None,
+    template_version: str | None = None,
 ) -> LedgerRecord:
     """Builds one §14 ledger record for a single day's tick. `proposal`/
     `gate_verdict` are None on non-wakeup ticks (§7: reason_code/
     gate_verdict/gate_rule_fired are wakeup-only). `send_hour` is stamped
     here, by the ledger (§9, §14), as the fixed `AGENT_SEND_HOUR`
     whenever `contact_sent` is True - never computed or chosen by the
-    runner."""
+    runner. Every keyword argument from `fallback_reason` onward defaults
+    to exactly the value this function hardcoded before Day 6 Stage
+    6B/6C - passing any of them is opt-in, never required, and A3-D's
+    call site never does."""
     gate_verdict_str: str | None = None
     gate_rule_fired: str | None = None
     if gate_verdict is not None:
@@ -96,24 +123,24 @@ def default_ledger_record(
         tick=tick,
         tick_type=tick_type,
         view_hash=_hash_view(view),
-        prompt_hash=None,
-        raw_output=None,
+        prompt_hash=prompt_hash,
+        raw_output=raw_output,
         parsed_action=asdict(proposal) if proposal is not None else None,
         reason_code=proposal.reason_code if proposal is not None else None,
         rationale=proposal.rationale if proposal is not None else None,
         gate_verdict=gate_verdict_str,
         gate_rule_fired=gate_rule_fired,
-        fallback_reason=None,
+        fallback_reason=fallback_reason,
         executed_action=executed_action,
         budget_before=budget_before,
         budget_after=budget_after,
         send_hour=AGENT_SEND_HOUR if contact_sent else None,
-        latency_ms=None,
-        tokens_in=None,
-        tokens_out=None,
-        cost=0.0,
-        model_version=None,
-        template_version=None,
+        latency_ms=latency_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost=cost,
+        model_version=model_version,
+        template_version=template_version,
     )
 
 

@@ -1,0 +1,13 @@
+{
+  "arm": "A3-LLM-GPT-C1",
+  "config_hash": "d1a8e016329de4095becb3b70662a3bb6b5f400c86e087df649f2054f8798866",
+  "git_sha": "0d49ec196790c72f78c68cc47f24a00dc8fea5d0",
+  "llm_cost_inr": 0.0,
+  "model_version": "gpt-5-mini",
+  "regime": "B",
+  "seed": 20260825,
+  "spec_version": "eval-spec-v1.7",
+  "sweep_cell": "baseline",
+  "timestamp": "2026-08-29T00:14:45+05:30",
+  "wall_clock_seconds": 2919.571184100001
+}
