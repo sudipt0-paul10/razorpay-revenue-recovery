@@ -274,7 +274,18 @@ environment-enforced, not agent-demonstrated, for **every** arm).
   exercised **only** by the synthetic adversarial proposals §8's gate
   tests construct.
 - **`fallback_reason`**: `timeout | unparseable | schema_violation |
-  gate_rejected | stale_state | null` (§11, §19).
+  gate_rejected | stale_state | no_executor_mapping | null` (§11, §19).
+  `[CORRECTION, eval-spec-v1.10]` `no_executor_mapping` is the sixth,
+  enforcement-layer value added by `EVAL.md §7.1` item E
+  (`eval-spec-v1.8`): it fires when the gate accepts a proposal but the
+  executor holds no legal mapping for the proposed `(action_type,
+  remedy)` pair — distinct from `gate_rejected`. It is not added to
+  `rrx.agent.planner.FALLBACK_REASONS`, which remains the pre-
+  `eval-spec-v1.8` five-value set — that constant's own scope (per its
+  module docstring) is the three fallback reasons the planner itself can
+  determine (`timeout`, `unparseable`, `schema_violation`) before a
+  `Proposal` reaches the gate; `gate_rejected`/`stale_state` were already
+  outside its own determination, and `no_executor_mapping` is the same.
 
 Not part of, and does not modify, `data/decline_codes.yaml`.
 
@@ -762,7 +773,7 @@ Per-tick JSONL record, written by `src/rrx/agent/ledger.py`:
 | `rationale` | str \| null | populated for both arms — A3-D: fixed rule-id string; A3-LLM: model text | On `wakeup` ticks | Yes — fired rule id |
 | `gate_verdict` | enum: accept/reject \| null | §8 outcome | On `wakeup` ticks | Yes |
 | `gate_rule_fired` | `R1-R8` \| null | §8 | If rejected | Yes |
-| `fallback_reason` | enum (§7, 5 values) \| null | | If fallback occurred | Always null — A3-D is the fallback target |
+| `fallback_reason` | enum (§7, 6 values) \| null `[CORRECTION, eval-spec-v1.10]` | | If fallback occurred | Always null — A3-D is the fallback target |
 | `executed_action` | object \| null | what actually ran | Yes | Yes |
 | `budget_before` | int | pre-decision | Yes | Yes |
 | `budget_after` | int | post-decision | Yes | Yes |

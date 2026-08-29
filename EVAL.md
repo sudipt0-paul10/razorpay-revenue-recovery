@@ -656,7 +656,7 @@ above, preserved verbatim rather than rewritten:
 ### 5.4 A3 decision-audit taxonomy `[AMENDMENT, eval-spec-v1.4]`
 
 Every A3 tick (wakeup or not, A3-D or A3-LLM) produces exactly one
-ledger record carrying a four-part, closed, project-internal taxonomy:
+ledger record carrying a four-part, project-internal taxonomy:
 
 - `tick_type`: `wakeup | no_wakeup | budget_exhausted | terminal_suppressed`
 - `reason_code` (7 values, populated only on `wakeup` ticks):
@@ -665,7 +665,32 @@ ledger record carrying a four-part, closed, project-internal taxonomy:
   risk_flagged`
 - `gate_rule_fired`: `R1–R8 | null`
 - `fallback_reason`: `timeout | unparseable | schema_violation |
-  gate_rejected | stale_state | null`
+  gate_rejected | stale_state | no_executor_mapping | null`
+
+`[CORRECTION, eval-spec-v1.10]` `fallback_reason` was previously stated
+as closed at five named values; this line now names the sixth,
+`no_executor_mapping`, added by the `eval-spec-v1.8 §7.1` item E
+invariant ("a gate-accepted proposal must have a legal executor
+mapping"). It is an **enforcement-layer** fallback reason: it fires when
+the gate accepts a proposal (no R1–R8 rule rejects it) but the executor
+holds no legal mapping for the proposed `(action_type, remedy)` pair —
+distinct from `gate_rejected`, which fires when the gate itself refuses
+the proposal. `no_executor_mapping` is deliberately **not** added to
+`rrx.agent.planner.FALLBACK_REASONS` (`src/rrx/agent/planner.py`): that
+constant fixes the pre-`eval-spec-v1.8` five-value set this section
+previously named, kept unmodified there because the planner module's own
+scope, by its own docstring, is limited to the three fallback reasons a
+planner call can itself determine (`timeout`, `unparseable`,
+`schema_violation`) before a `Proposal` ever reaches the gate —
+`gate_rejected` and `stale_state` were already outside that module's own
+determination, and `no_executor_mapping` is the same: determined only
+after gate evaluation, at a layer the planner module has no visibility
+into. This section, not that constant, is the authority on the full
+taxonomy. The taxonomy is closed at these six named values plus `null`; no
+`LedgerRecord` field, type, or schema changes — `fallback_reason` was
+always, and remains, a plain `str | None` field, and this is a
+documentation correction of what values it may hold, not a schema
+redesign.
 
 None of this is a field of, or a modification to, `data/decline_codes.yaml`
 — kept separate from that file's existing `agent_action` field. Full

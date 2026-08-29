@@ -1,5 +1,70 @@
 # Changelog
 
+## eval-spec-v1.10 — fallback-reason taxonomy corrected for executor enforcement — 2026-08-29
+
+Correction-only stage. No simulator, agent, config, test, or result
+artifact changed. No holdout index accessed. `eval-spec-v1.9` remains
+unchanged at `fbe09c6`; this entry does not rewrite any earlier version.
+
+### What changed
+
+| Item | Class | Summary |
+|---|---|---|
+| `EVAL.md §5.4` | `CORRECTION` | Extended the `fallback_reason` taxonomy from five to six named values by adding `no_executor_mapping` |
+| `docs/A3-DESIGN.md` §7 taxonomy | `CORRECTION` | Updated the corresponding enum list to the six-value taxonomy |
+| `docs/A3-DESIGN.md` §14 | `CORRECTION` | Updated the ledger-table reference from five to six values |
+
+### Why this is a correction
+
+`eval-spec-v1.8` introduced an enforcement-layer invariant (`§7.1` item
+E) requiring a distinguishing `fallback_reason` when a gate-accepted
+proposal has no legal executor mapping. The implementation uses the
+value `no_executor_mapping`, and Stage 7.2's regression tests
+(`tests/test_executor_mapping_enforcement.py`) already verify it.
+
+The frozen `§5.4` taxonomy was not updated at that time and therefore
+incorrectly continued to describe the field as closed at five values.
+This amendment reconciles the documentation with the already-frozen
+behavior; it does not introduce new behavior.
+
+### Layering
+
+`no_executor_mapping` is an executor/enforcement-layer value, determined
+only after gate evaluation. It is not added to
+`rrx.agent.planner.FALLBACK_REASONS`, which remains the pre-
+`eval-spec-v1.8` five-value set, unmodified. That constant's own module
+docstring already scopes its authority to the three fallback reasons the
+planner itself can determine (`timeout`, `unparseable`,
+`schema_violation`) before a `Proposal` reaches the gate — `gate_rejected`
+and `stale_state` were already outside its own determination, and
+`no_executor_mapping` is the same. `EVAL.md §5.4`, not that constant, is
+the authority on the full six-value taxonomy.
+
+### What did not change
+
+- `LedgerRecord` schema.
+- Simulator.
+- Agent behavior.
+- Gate rules R1–R8.
+- §5.2 invariants.
+- Criterion 1.
+- v1.7 comparator/tie-set rule.
+- Stress definition.
+- Sensitivity cell membership or threshold.
+- Holdout behavior.
+- Any result artifact.
+
+### Verification required before commit
+
+- Only `EVAL.md`, `CHANGELOG.md`, and `docs/A3-DESIGN.md` changed.
+- The six-value taxonomy is consistent in both documents.
+- `no_executor_mapping` is explicitly distinguished from `gate_rejected`.
+- `rrx.agent.planner.FALLBACK_REASONS` remains unchanged.
+- `eval-spec-v1.9` remains at `fbe09c6`.
+- No results artifacts changed.
+- No holdout access.
+- No API calls.
+
 ## eval-spec-v1.9 — stress-split definition corrected to the implemented one — 2026-08-29
 
 Correction-only stage. No simulator, agent, config, or test change. No
