@@ -1,0 +1,13 @@
+{
+  "arm": "A1",
+  "config_hash": "d1a8e016329de4095becb3b70662a3bb6b5f400c86e087df649f2054f8798866",
+  "git_sha": "29e8cd394402f9fef1b32a7ed1ffaf69f474a572",
+  "llm_cost_inr": null,
+  "model_version": null,
+  "regime": "B",
+  "seed": 20260825,
+  "spec_version": "eval-spec-v1.10",
+  "sweep_cell": "baseline",
+  "timestamp": "2026-08-30T03:48:29+05:30",
+  "wall_clock_seconds": 0.8733404000522569
+}

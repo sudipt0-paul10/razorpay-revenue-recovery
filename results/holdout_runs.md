@@ -198,3 +198,39 @@ This second refusal is what prompted the Day 8 SHA-drift investigation and the s
 
 - `2026-08-30T03:18:06+05:30` | arm=(none — precondition check, no arm reached) | attempt=1 | status=REFUSED | reason=implementation SHA guard mismatch (HEAD 53bd122 vs pinned 86930b2, since corrected in commit 659b515) | holdout data accessed: no
 - `2026-08-30T03:39:14+05:30` | arm=(none — precondition check, no arm reached) | attempt=2 | status=REFUSED | reason=implementation SHA guard mismatch (HEAD ab244f6 vs pinned 53bd122; exposed the self-referential-literal design defect, since replaced by an evaluation-surface diff check + dynamically-resolved holdout-authorized-latest tag) | holdout data accessed: no
+
+## Holdout execution session started — 2026-08-29T22:18:26+00:00
+
+- Executing commit (HEAD): 29e8cd394402f9fef1b32a7ed1ffaf69f474a572
+- Authorization tag: holdout-authorized-latest
+- Frozen implementation anchor: code-freeze-holdout (4d45db461943978637673a5611a429e0fe826065)
+- Spec version: eval-spec-v1.10 (125eae8841562f6d5eccab58e055400340e71af6)
+- Split: holdout | N: 2000 | Master seed: 20260825
+- Arms, execution order: A0, A1, A2_STRENGTHENED, A3-D, A4
+- Started via: scripts/run_holdout.py (--i-have-authorized-the-holdout)
+- Per-arm outcomes appended below as each arm completes or fails.
+- 2026-08-29T22:18:28+00:00 | arm=A0 | run_id=a0 | status=COMPLETE
+- 2026-08-29T22:18:29+00:00 | arm=A1 | run_id=a1 | status=COMPLETE
+- 2026-08-29T22:18:30+00:00 | arm=A2_STRENGTHENED | run_id=a2_strengthened | status=COMPLETE
+- 2026-08-29T22:18:33+00:00 | arm=A3-D | run_id=a3_d | status=COMPLETE
+- 2026-08-29T22:18:33+00:00 | arm=A4 | run_id=a4 | status=COMPLETE
+
+---
+
+## SEAL — HOLDOUT ARTIFACTS SEALED (`docs/DAY8-HOLDOUT-PLAN.md §E.3`)
+
+**Seal timestamp:** `2026-08-30T03:56:17+05:30`
+
+**Run ID:** `4d45db461943` (`results/holdout/4d45db461943/` — the run-directory name actually in use, per `scripts/run_holdout.py`'s `HOLDOUT_OUTPUT_ROOT = results/holdout/<code-freeze-holdout-sha[:12]>`; not a separately-invented identifier).
+
+**Implementation SHA (executing commit):** `29e8cd394402f9fef1b32a7ed1ffaf69f474a572` (matches every sealed `manifest.json`'s `git_sha` field, and the `holdout-authorized-latest` tag at the time of execution).
+
+**Artifact verification statement:** Full artifact verification (5 arms × 10 checks + 3 A3-D-specific checks) was performed **before** sealing, per `docs/DAY8-HOLDOUT-PLAN.md §E.3`'s "before any aggregation or inspection" ordering being read as applying to result *interpretation*, not to the structural verification that must precede a seal. Result: **all checks PASS** — 2,000/2,000 episodes per arm (10,000 total), exact indices 9000–10999 for every arm, zero duplicates/gaps/extras, zero malformed records, zero metric-recomputation mismatches, correct `spec_version`/seed/split/`config_hash` provenance on every manifest, and the pre-registered A3-D audit-sample rule (`docs/DAY8-AUDIT-SAMPLE-RULING.md`) successfully applied (20 pre-declared indices, 558 records extracted, 2 legitimate zero-record episodes disclosed as-is). **No statistical comparison, comparator selection, criterion evaluation, or 40%-gap calculation was performed as part of this verification or this seal.**
+
+**Known pre-existing defect, explicitly not remedied here:** `results/holdout/4d45db461943/a3_d/run_params.json` records `"policy": "<unknown>"` and `"runner": "rrx.sim.engine.run_episode"` — both incorrect (A3-D actually executes via `rrx.harness.runner.run_episode_a3` / `rrx.agent.policy.a3d_policy`). Root cause: `src/rrx/eval/arms.py`'s `_POLICY_QUALNAME` dict has no entry for `ARM_A3D`. **Confirmed pre-existing** — the already-committed `results/stress-20260829-a3d/run_params.json` (Stage 7.3, predating all Day 8 work) shows the identical wrong values. Cosmetic/documentation-only: does not affect `manifest.json`'s `arm` field (correctly `"A3-D"`), the actual code path executed, `episode_results.jsonl`, `metrics.json`, or the independent recomputation (which matched exactly). **This artifact is sealed as-is, unmodified**, per instruction.
+
+**Checksum manifest:** `results/holdout/4d45db461943/SHA256SUMS` — SHA-256 over **every artifact in the run directory, including the gitignored `a3_d/ledger.jsonl`** (per §E.2's "hash of every artifact including gitignored ones"), **21 files** hashed, generated before the checksum file itself existed (so it does not, and cannot circularly, hash itself). `SHA256SUMS`'s own hash, recorded here as an additional integrity anchor: `889d4f454aff43929b4cd019ebfd5830ecb208a1c1543c95629a75a885303f4e`.
+
+**Seal tag:** `holdout-run-4d45db461943-sealed`, created on the commit that adds these sealed artifacts (git-committable files only — `ledger.jsonl` remains gitignored, its hash preserved in `SHA256SUMS` instead) plus this seal record. The tag is the evidence that these exact numbers existed, unmodified, before any aggregation, comparison, or interpretation occurred.
+
+**No result interpretation, comparator selection, criterion evaluation, or winner determination appears anywhere in this seal record.**
