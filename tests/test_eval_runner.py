@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from rrx.agent.ledger import LedgerRecord
 from rrx.eval.runner import (
     ResultsDirectoryExistsError,
@@ -214,3 +216,71 @@ def test_main_stops_if_results_dir_already_exists(tmp_path):
         assert False, "expected ResultsDirectoryExistsError"
     except ResultsDirectoryExistsError:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Day 8 pre-holdout provenance fixes (docs/DAY8-PREFLIGHT-BLOCKER-AUDIT.md):
+#   Issue 1 - episode_results.jsonl (per-episode outcome persistence)
+#   Issue 2 - manifest.json's spec_version
+# Covers the A3-D / main() path here; A0/A1/A2-strengthened/A4's shared
+# run_official_arm() path is covered in test_eval_arms.py.
+# ---------------------------------------------------------------------------
+
+_EPISODE_RESULT_FIELDS = {
+    "opening_condition_key",
+    "invoice_amount_inr",
+    "invoice_recovered",
+    "subscription_rescued",
+    "contacts_sent",
+    "wasted_attempts",
+    "card_change_sent_for_insufficient_funds",
+}
+
+
+def test_write_episode_results_direct(tmp_path):
+    from rrx.eval.runner import write_episode_results
+
+    results = [_result(invoice_recovered=True), _result(invoice_recovered=False)]
+    indices = [1000, 1001]
+    out_path = write_episode_results(tmp_path, indices, results)
+
+    assert out_path == tmp_path / "episode_results.jsonl"
+    lines = out_path.read_text().strip().splitlines()
+    assert len(lines) == 2
+
+    records = [json.loads(line) for line in lines]
+    assert records[0]["episode_index"] == 1000
+    assert records[0]["invoice_recovered"] is True
+    assert records[1]["episode_index"] == 1001
+    assert records[1]["invoice_recovered"] is False
+    for record in records:
+        assert set(record) == {"episode_index"} | _EPISODE_RESULT_FIELDS
+
+
+def test_write_episode_results_rejects_length_mismatch(tmp_path):
+    from rrx.eval.runner import write_episode_results
+
+    with pytest.raises(ValueError):
+        write_episode_results(tmp_path, [1000, 1001], [_result()])
+
+
+def test_main_writes_episode_results_jsonl_for_a3d(tmp_path):
+    indices = list(range(1000, 1010))
+    run_dir = main(results_dir=tmp_path, run_id="smoke-episode-results-a3d", indices=indices)
+
+    episode_results_path = run_dir / "episode_results.jsonl"
+    assert episode_results_path.exists()
+
+    lines = episode_results_path.read_text().strip().splitlines()
+    assert len(lines) == len(indices)
+
+    records = [json.loads(line) for line in lines]
+    assert [r["episode_index"] for r in records] == indices
+    for record in records:
+        assert set(record) == {"episode_index"} | _EPISODE_RESULT_FIELDS
+
+
+def test_main_manifest_reports_eval_spec_v1_10(tmp_path):
+    run_dir = main(results_dir=tmp_path, run_id="smoke-spec-version-a3d", indices=[1000])
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["spec_version"] == "eval-spec-v1.10"

@@ -277,7 +277,10 @@ def run_official_arm(
     (A0/A2/A2_STRENGTHENED/A4): rrx.sim.engine.run_episode and
     rrx.baselines.a4.run_a4_episode have no ledger mechanism (see
     rrx.eval.runner.LEDGER_METRICS_UNAVAILABLE_FOR_POLICIES_ARMS) - there
-    is nothing to serialize, not an omission.
+    is nothing to serialize, not an omission. `episode_results.jsonl`
+    (rrx.eval.runner.write_episode_results, Day 8 pre-holdout provenance
+    fix) is written for every arm regardless, since `results` always
+    exists for every arm this dispatcher supports.
 
     Per the Stage B brief §8: intended for smoke-scale (≤10-episode)
     exercise via tmp_path in tests, not for the official 2,000-episode
@@ -337,6 +340,12 @@ def run_official_arm(
         with open(ledger_path, "w", encoding="utf-8") as fh:
             for rec in ledger_records:
                 fh.write(to_json_line(rec) + "\n")
+
+    # Day 8 pre-holdout provenance fix (docs/DAY8-PREFLIGHT-BLOCKER-AUDIT.md
+    # Issue 1): same writer eval_runner.main() uses for A3-D, so every wired
+    # arm (A0/A1/A2-strengthened/A3-D/A4) persists the identical per-episode
+    # artifact through the identical function - no per-arm variant.
+    eval_runner.write_episode_results(run_dir, resolved_indices, results)
 
     metrics_path = run_dir / "metrics.json"
     metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True))

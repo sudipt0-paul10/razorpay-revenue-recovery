@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -55,7 +56,24 @@ REGIME = "B"
 # be called again per the standing "do not rerun A3-D" rule, so this
 # constant's only live consumers going forward are the comparator-arm
 # path and the stress path, both of which execute now, under v1.8).
-SPEC_VERSION = "eval-spec-v1.8"
+#
+# Bumped eval-spec-v1.8 -> eval-spec-v1.10 (Day 8 pre-holdout provenance
+# fix, docs/DAY8-PREFLIGHT-BLOCKER-AUDIT.md Issue 2): this constant had
+# drifted three tags behind (v1.9 -> fbe09c6, v1.10 -> 125eae8 were both
+# cut without a corresponding bump here), so any run launched between
+# those tags and this fix would have self-reported "eval-spec-v1.8" in
+# its manifest despite executing under later frozen text. eval-spec-v1.10
+# is the tag `code-freeze-holdout` (4d45db4) itself annotates as the
+# frozen contract ("pre-holdout implementation/artifact/documentation
+# freeze, eval-spec-v1.10") - see docs/DAY8-FREEZE-CONFLICT.md for the
+# separate, unresolved question of the two untagged `eval-spec-v1.11`
+# documentation notes 4d45db4 also carries; this bump does not take a
+# position on that question, it only closes the v1.8 drift. Previously-
+# written manifests (e.g. results/a3d-dev-20260828-01/, correctly still
+# "eval-spec-v1.5") are untouched by this bump, per the same
+# report-what-actually-governed-the-run principle the v1.6->v1.8 note
+# above already established.
+SPEC_VERSION = "eval-spec-v1.10"
 # No sweep cell is applied in this run - baseline configs only.
 SWEEP_CELL = "baseline"
 # A3-D never calls an LLM (rrx.agent.policy.a3d_policy is a pure function);
@@ -447,6 +465,49 @@ def write_run_params(
 
 
 # ---------------------------------------------------------------------------
+# 3b. Per-episode outcome persistence (Day 8 pre-holdout provenance fix).
+#
+# compute_metrics()/compute_metrics_results_only() reduce `list[EpisodeResult]`
+# to aggregate counts/rates and the caller has historically discarded the
+# list itself once metrics.json is written - EVAL.md §6's paired bootstrap
+# needs the per-episode vector, keyed by episode index, to be reproducible
+# from committed artifacts rather than re-run. This writer adds exactly one
+# new file per run; it does not change how EpisodeResult is computed, and it
+# is called identically for every wired arm (A0/A1/A2-strengthened/A3-D/A4)
+# from both run_official_arm() (rrx.eval.arms) and main() below - the same
+# mechanism, not a per-arm variant.
+# ---------------------------------------------------------------------------
+
+def write_episode_results(
+    run_dir: Path, indices: list[int], results: list[EpisodeResult]
+) -> Path:
+    """Writes <run_dir>/episode_results.jsonl - one JSON object per episode,
+    in the same order as `indices`/`results` (both already index-ordered by
+    every caller), each carrying the episode index plus every field of the
+    already-computed EpisodeResult (dataclasses.asdict - no field renamed,
+    dropped, or added; a schema change to EpisodeResult is reflected here
+    automatically rather than needing a second, drifting field list).
+
+    Deterministic: same inputs always produce the same file, byte for byte
+    (sort_keys=True, no wall-clock or random content). Paired bootstrap
+    (rrx.sim.run_stage3.paired_bootstrap_ci) can be recomputed from this file
+    alone, paired across arms by `episode_index`, without re-running the
+    simulator.
+    """
+    if len(results) != len(indices):
+        raise ValueError(
+            f"episode_index/result length mismatch: {len(indices)} indices, "
+            f"{len(results)} results - refusing to write a misaligned file."
+        )
+    out_path = run_dir / "episode_results.jsonl"
+    with open(out_path, "w", encoding="utf-8") as fh:
+        for idx, result in zip(indices, results):
+            record = {"episode_index": idx, **asdict(result)}
+            fh.write(json.dumps(record, sort_keys=True) + "\n")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
 # 4. main()
 # ---------------------------------------------------------------------------
 
@@ -492,6 +553,8 @@ def main(
         for rec in ledger_records:
             fh.write(to_json_line(rec) + "\n")
 
+    episode_results_path = write_episode_results(run_dir, resolved_indices, results)
+
     metrics_path = run_dir / "metrics.json"
     metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True))
 
@@ -514,9 +577,10 @@ def main(
     )
 
     print(f"Run {run_id} complete: n={len(results)}, wall_clock={wall_clock_seconds:.1f}s")
-    print(f"  manifest: {manifest_path}")
-    print(f"  ledger:   {ledger_path}")
-    print(f"  metrics:  {metrics_path}")
+    print(f"  manifest:         {manifest_path}")
+    print(f"  ledger:           {ledger_path}")
+    print(f"  episode_results:  {episode_results_path}")
+    print(f"  metrics:          {metrics_path}")
     print(json.dumps(metrics, indent=2, sort_keys=True))
 
     return run_dir

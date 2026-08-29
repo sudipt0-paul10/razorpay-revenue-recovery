@@ -325,3 +325,67 @@ def test_run_official_arm_stops_if_dir_exists(tmp_path):
         run_official_arm(
             ARM_A2_STRENGTHENED, "already-here", results_dir=tmp_path, indices=[1000]
         )
+
+
+# ---------------------------------------------------------------------------
+# Day 8 pre-holdout provenance fixes:
+#   Issue 1 - episode_results.jsonl (per-episode outcome persistence)
+#   Issue 2 - manifest.json's spec_version
+# docs/DAY8-PREFLIGHT-BLOCKER-AUDIT.md has the full audit; these tests cover
+# only the two fixes, over the run_official_arm() path (A0/A1/A2-strengthened/
+# A4 - A3-D's equivalent is covered separately in test_eval_runner.py, since
+# it goes through rrx.eval.runner.main(), not this generalized dispatcher).
+# ---------------------------------------------------------------------------
+
+_EPISODE_RESULT_FIELDS = {
+    "opening_condition_key",
+    "invoice_amount_inr",
+    "invoice_recovered",
+    "subscription_rescued",
+    "contacts_sent",
+    "wasted_attempts",
+    "card_change_sent_for_insufficient_funds",
+}
+
+
+@pytest.mark.parametrize(
+    "arm_key,run_id",
+    [
+        (ARM_A0, "smoke-a0-episode-results"),
+        (ARM_A1, "smoke-a1-episode-results"),
+        (ARM_A2_STRENGTHENED, "smoke-a2s-episode-results"),
+        ("A4", "smoke-a4-episode-results"),
+    ],
+)
+def test_run_official_arm_writes_episode_results_for_every_required_arm(
+    tmp_path, arm_key, run_id
+):
+    """Issue 1: A0/A1/A2-strengthened/A4 all go through run_official_arm(),
+    which now calls the same rrx.eval.runner.write_episode_results() A3-D's
+    path uses (test_eval_runner.py) - one mechanism, every wired arm."""
+    run_dir = run_official_arm(
+        arm_key, run_id, results_dir=tmp_path, indices=SMOKE_INDICES
+    )
+    episode_results_path = run_dir / "episode_results.jsonl"
+    assert episode_results_path.exists()
+
+    lines = episode_results_path.read_text().strip().splitlines()
+    assert len(lines) == len(SMOKE_INDICES)
+
+    records = [json.loads(line) for line in lines]
+    assert [r["episode_index"] for r in records] == SMOKE_INDICES
+    for record in records:
+        assert set(record) == {"episode_index"} | _EPISODE_RESULT_FIELDS
+        assert isinstance(record["invoice_recovered"], bool)
+        assert isinstance(record["subscription_rescued"], bool)
+        assert isinstance(record["contacts_sent"], int)
+
+
+def test_run_official_arm_manifest_reports_eval_spec_v1_10(tmp_path):
+    """Issue 2: run_official_arm() reads eval_runner.SPEC_VERSION, which must
+    now be 'eval-spec-v1.10', not the stale 'eval-spec-v1.8'."""
+    run_dir = run_official_arm(
+        ARM_A0, "smoke-a0-spec-version", results_dir=tmp_path, indices=SMOKE_INDICES
+    )
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["spec_version"] == "eval-spec-v1.10"
