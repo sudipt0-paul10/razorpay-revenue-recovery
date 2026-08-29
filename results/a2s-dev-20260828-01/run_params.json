@@ -1,0 +1,10 @@
+{
+  "arm": "A2_STRENGTHENED",
+  "index_end": 2999,
+  "index_start": 1000,
+  "master_seed": 20260825,
+  "n": 2000,
+  "policy": "rrx.baselines.a2_variants.a2_strengthened_action_for_day",
+  "runner": "rrx.sim.engine.run_episode",
+  "split": "dev"
+}

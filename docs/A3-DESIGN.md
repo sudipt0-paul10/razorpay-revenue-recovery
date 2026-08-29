@@ -847,6 +847,15 @@ planner failure (§19).
   `card_change_completion_propensity` (low, high) only. Any invocation of
   this fallback must be declared explicitly in `results/sensitivity.md`,
   naming which cells were skipped and why.
+
+  > `[CORRECTION, eval-spec-v1.11]` The two bullets above's "22 cells" /
+  > "22-cell sweep" references are read as 26 cells, pass mark 21/26 —
+  > the same correction `EVAL.md §7.1` item C (`eval-spec-v1.8`) already
+  > made for `EVAL.md §6A`, extended here to this section, which that
+  > correction did not originally sweep. Membership unchanged; no
+  > `[MODEL]` parameter, cell, or magnitude added or removed.
+  > `results/sensitivity.md` was subsequently regenerated from the
+  > registry in Stage 7.4 (commit `588b6c0`) and now shows 26 cells.
 - **Repeat-run subsample:** seeds 1000–1299, nested inside the 500-episode
   sweep subsample. Three live runs, three separate cache files (§13).
 - Relationship to "no per-cell retuning" (`model_params.yaml`, locked

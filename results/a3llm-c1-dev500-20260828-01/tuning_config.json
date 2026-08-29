@@ -1,0 +1,45 @@
+{
+  "actual_spend_inr": 0.0,
+  "cache_size": 32,
+  "config_id": "C1",
+  "dev_index_end": 1499,
+  "dev_index_start": 1000,
+  "dev_split": "dev",
+  "episodes_completed": 9,
+  "episodes_requested": 500,
+  "estimated_paid_equivalent_usd": 0.00615975,
+  "freeze_commit": "0d49ec196790c72f78c68cc47f24a00dc8fea5d0",
+  "latency_ms_min_mean_max": [
+    2804.8454999225214,
+    3971.629503569732,
+    5921.326500014402
+  ],
+  "model": "gemini-3.1-flash-lite",
+  "provider": "google",
+  "quota_stop": {
+    "episode_index": 1009,
+    "error": "Gemini quota/rate-limit exhausted (code=429): You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\nPlease retry in 11.576118592s.",
+    "position_in_config": 9
+  },
+  "spec_version": "eval-spec-v1.7",
+  "status": "quota_stopped_partial",
+  "temperature": 0.0,
+  "template_version": "a3-llm-prompt-v1",
+  "thinking_level": "minimal",
+  "timestamp": "2026-08-28T16:05:48+05:30",
+  "tokens_in_min_mean_max": [
+    309,
+    328.39285714285717,
+    371
+  ],
+  "tokens_in_total": 9195,
+  "tokens_out_min_mean_max": [
+    73,
+    91.92857142857143,
+    103
+  ],
+  "tokens_out_total": 2574,
+  "total_live_calls": 28,
+  "total_wakeup_ticks": 28,
+  "wall_clock_seconds": 123.638840300031
+}

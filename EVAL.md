@@ -960,6 +960,16 @@ evaluates to a pass mark of `ceil(0.80 × 26) = 21 / 26`, replacing the
 stale `18 / 22`. `results/sensitivity.md` carries the stale 22-cell
 structure and is regenerated from the registry.
 
+> `[CORRECTION, eval-spec-v1.11]` The sentence immediately above
+> describes the state at `eval-spec-v1.8`'s own writing — the artifact
+> genuinely carried the stale 22-cell structure at that time. Stage 7.4
+> (commit `588b6c0`) subsequently regenerated `results/sensitivity.md`
+> from the registry. The artifact now contains 26 cells and states pass
+> mark 21/26. All outcome columns (`clamped`, `invoice CI`, `rescue CI`,
+> `win`) remain `PENDING` in every row — no actual sensitivity sweep has
+> been run. This note does not alter the v1.8 sentence it follows; it
+> records that the regeneration it anticipated has since occurred.
+
 **D. `[AMENDMENT, eval-spec-v1.8]` Criterion 5 is satisfied against a
 stubbed planner, without live API calls.**
 

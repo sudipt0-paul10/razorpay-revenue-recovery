@@ -1,0 +1,10 @@
+{
+  "arm": "A3-D",
+  "index_end": 2999,
+  "index_start": 1000,
+  "master_seed": 20260825,
+  "n": 2000,
+  "policy": "rrx.agent.policy.a3d_policy",
+  "runner": "rrx.harness.runner.run_episode_a3",
+  "split": "dev"
+}
