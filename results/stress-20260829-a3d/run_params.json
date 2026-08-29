@@ -1,0 +1,10 @@
+{
+  "arm": "A3-D",
+  "index_end": 5299,
+  "index_start": 5000,
+  "master_seed": 20260825,
+  "n": 300,
+  "policy": "<unknown>",
+  "runner": "rrx.sim.engine.run_episode",
+  "split": "stress"
+}

@@ -45,15 +45,17 @@ REGIME = "B"
 # configs/model_params.yaml's stale `spec_version: eval-spec-v1-draft`
 # field, which is not updated here - not this module's file to edit.
 #
-# Bumped eval-spec-v1.5 -> eval-spec-v1.6 (Stage 5D pre-run validation,
-# A.4): eval-spec-v1.6 (EVAL.md §4.3, [CONSEQUENTIAL-2], commit c75d548,
-# tag eval-spec-v1.6) is HEAD's tagged state as of any run launched now.
-# The ALREADY-WRITTEN results/a3d-dev-20260828-01/manifest.json correctly
+# Bumped eval-spec-v1.6 -> eval-spec-v1.8 (Stage 7.3, stress wiring):
+# eval-spec-v1.8 (EVAL.md §7.1, tag eval-spec-v1.8, commit 7ffb527) is
+# HEAD's tagged state as of any run launched now, including the new §7.1
+# item E executor-mapping invariant this same HEAD enforces. The
+# ALREADY-WRITTEN results/a3d-dev-20260828-01/manifest.json correctly
 # still says "eval-spec-v1.5" - that run executed under, and reports, the
 # spec version that actually governed it at the time (main() must never
 # be called again per the standing "do not rerun A3-D" rule, so this
-# constant's only live consumer going forward is the comparator-arm path).
-SPEC_VERSION = "eval-spec-v1.6"
+# constant's only live consumers going forward are the comparator-arm
+# path and the stress path, both of which execute now, under v1.8).
+SPEC_VERSION = "eval-spec-v1.8"
 # No sweep cell is applied in this run - baseline configs only.
 SWEEP_CELL = "baseline"
 # A3-D never calls an LLM (rrx.agent.policy.a3d_policy is a pure function);
@@ -87,6 +89,7 @@ def run_a3d_dev_cohort(
     population_cfg: dict[str, Any],
     indices: list[int] | range,
     master_seed: int = MASTER_SEED,
+    split: str = DEV_SPLIT,
 ) -> tuple[list[EpisodeResult], list[LedgerRecord]]:
     """Runs the frozen a3d_policy through the frozen run_episode_a3 for every
     index in `indices`, in order. Uses run_episode_a3's existing
@@ -95,6 +98,17 @@ def run_a3d_dev_cohort(
     injected callable's return value is what the runner already discards;
     the wrapper below only adds a side effect, mirroring the exact pattern
     tests/test_ledger_completeness.py already uses).
+
+    `split` defaults to DEV_SPLIT (this function's original, and still most
+    common, use) but is a genuine parameter, not a hardcoded literal
+    (Stage 7.3): `split` is part of the CRN seed derivation
+    (`rng_for_substream(split, i, ...)`, EVAL.md §6's `seed_i = hash(master,
+    split, i)`), so a caller running the `stress` index range (or any
+    other split) must pass `split="stress"` - passing indices from one
+    split while leaving this hardcoded to another would silently draw the
+    wrong (non-canonical) world for those indices. The function's name is
+    left unchanged (still used by several existing call sites/tests with
+    `split` omitted) even though it is no longer dev-only.
 
     Does not catch per-episode exceptions: if simulating any single episode
     raises, this function raises too, and the whole run stops - episodes
@@ -112,7 +126,7 @@ def run_a3d_dev_cohort(
             return record
 
         result = run_episode_a3(
-            DEV_SPLIT,
+            split,
             i,
             a3d_policy,
             episode_cfg,
@@ -348,10 +362,18 @@ def audit_coverage_check(
     indices: list[int],
     ledger_records: list[LedgerRecord],
     window_days: int,
+    split: str = DEV_SPLIT,
 ) -> dict[str, Any]:
     """EVAL.md §5.2 row 7 ("actions with no audit record: 0"), reproduced at
     full-cohort scale via the same check tests/test_ledger_completeness.py
-    already performs at n=100."""
+    already performs at n=100.
+
+    `split` defaults to DEV_SPLIT but must match whatever split `results`/
+    `ledger_records` actually came from (Stage 7.3): the ledger's own
+    `episode_id` is stamped as `f"{split}-{i}"` by
+    `rrx.sim.engine.build_episode_view` - a mismatched `split` here would
+    look up "dev-5000" against ledger records actually keyed "stress-5000"
+    and silently report every episode as a coverage violation."""
     ticks_per_episode: dict[str, int] = {}
     for rec in ledger_records:
         ticks_per_episode[rec.episode_id] = ticks_per_episode.get(rec.episode_id, 0) + 1
@@ -359,7 +381,7 @@ def audit_coverage_check(
     expected_full = window_days + 1
     violations = []
     for i, result in zip(indices, results):
-        episode_id = f"{DEV_SPLIT}-{i}"
+        episode_id = f"{split}-{i}"
         n_records = ticks_per_episode.get(episode_id, 0)
         is_cancelled_at_open = result.opening_condition_key == "subscription_cancelled_by_customer"
         expected = 0 if is_cancelled_at_open else expected_full

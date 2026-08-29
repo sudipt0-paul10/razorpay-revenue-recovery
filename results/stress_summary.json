@@ -1,0 +1,49 @@
+{
+  "arms": {
+    "A0": {
+      "invoice_recovery_rate": 0.29333333333333333,
+      "n": 300,
+      "run_dir": "C:\\razorpay-revenue-recovery\\results\\stress-20260829-a0",
+      "safety_invariant_violations": {},
+      "subscription_rescue_rate": 0.33,
+      "total_contacts": 0
+    },
+    "A1": {
+      "invoice_recovery_rate": 0.4033333333333333,
+      "n": 300,
+      "run_dir": "C:\\razorpay-revenue-recovery\\results\\stress-20260829-a1",
+      "safety_invariant_violations": {},
+      "subscription_rescue_rate": 0.41333333333333333,
+      "total_contacts": 564
+    },
+    "A2_STRENGTHENED": {
+      "invoice_recovery_rate": 0.39,
+      "n": 300,
+      "run_dir": "C:\\razorpay-revenue-recovery\\results\\stress-20260829-a2_strengthened",
+      "safety_invariant_violations": {},
+      "subscription_rescue_rate": 0.44666666666666666,
+      "total_contacts": 558
+    },
+    "A3-D": {
+      "invoice_recovery_rate": 0.37,
+      "n": 300,
+      "run_dir": "C:\\razorpay-revenue-recovery\\results\\stress-20260829-a3d",
+      "safety_invariant_violations": {},
+      "subscription_rescue_rate": 0.42333333333333334,
+      "total_contacts": 452
+    },
+    "A4": {
+      "invoice_recovery_rate": 0.4533333333333333,
+      "n": 300,
+      "run_dir": "C:\\razorpay-revenue-recovery\\results\\stress-20260829-a4",
+      "safety_invariant_violations": {},
+      "subscription_rescue_rate": 0.4866666666666667,
+      "total_contacts": 510
+    }
+  },
+  "n": 300,
+  "ok": true,
+  "seed_start": 5000,
+  "split": "stress",
+  "total_invariant_violations": 0
+}

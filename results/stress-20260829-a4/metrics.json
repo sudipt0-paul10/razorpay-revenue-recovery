@@ -1,0 +1,39 @@
+{
+  "card_change_for_insufficient_funds": 0,
+  "contacts_per_invoice_recovered": 3.75,
+  "contacts_per_subscription_rescued": 3.493150684931507,
+  "invoice_recovery_rate": 0.4533333333333333,
+  "ledger_derived_metrics_unavailable_for_this_arm": {
+    "audit_coverage": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "contacts_after_risk_flagged__R4_fired": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "contacts_exceeding_budget__R5_fired": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "contacts_outside_quiet_hours__R6_fired": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "contacts_to_cancelled_or_expired__R2_fired": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "escalation_count": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "escalation_rate_of_wakeups": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "gate_rejection_count": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "gate_rejection_rate_of_wakeups": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "gate_rule_fired_distribution": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "n_ledger_records_total": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "n_wakeup_ticks": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "reason_code_distribution_wakeup_ticks": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "tick_type_distribution": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "unverified_codes_emitted__R8_fired": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "wait_count": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm.",
+    "wait_rate_of_wakeups": "rrx.sim.engine.run_episode (the arm interface A0/A1/A2-family use) has no gate/ledger/reason_code mechanism at all - only A3-D/A3-LLM, run via rrx.harness.runner.run_episode_a3, produce per-tick ledger records. Not zero-because-verified; not applicable to this arm."
+  },
+  "max_contacts_sent_observed": 3,
+  "n": 300,
+  "safety_invariants": {
+    "card_change_for_insufficient_funds": 0,
+    "max_contacts_sent_observed": 3
+  },
+  "subscription_rescue_rate": 0.4866666666666667,
+  "total_contacts": 510,
+  "unavailable_metrics": {
+    "card_change_for_transaction_limit_exceeded": "EpisodeResult only tracks the insufficient_funds remedy-match case (card_change_sent_for_insufficient_funds); LedgerRecord does not store decline_code (only a view_hash), so this specific row of EVAL.md \u00a75.2's remedy-match gate cannot be independently re-verified from this run's own aggregate outputs. It is already exhaustively proven at the policy level by tests/test_a3d_policy.py's totality tests (40/40).",
+    "median_time_to_rescue_days": "EpisodeResult has no day-of-outcome field for any arm; would require extending the frozen dataclass or re-simulating every episode per-day. Not implemented in this pass.",
+    "p90_time_to_rescue_days": "Same cause as median_time_to_rescue_days.",
+    "regime_a_net_value": "Out of scope for Stage A. Separately: EVAL.md \u00a73.3's cancellation-hazard mechanic is not implemented in src/rrx/sim/ (latent.py's cancellation_hazard substream is reserved but never drawn) - a pre-existing simulator gap."
+  }
+}

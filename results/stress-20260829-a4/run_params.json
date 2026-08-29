@@ -1,0 +1,10 @@
+{
+  "arm": "A4",
+  "index_end": 5299,
+  "index_start": 5000,
+  "master_seed": 20260825,
+  "n": 300,
+  "policy": "rrx.baselines.a4.run_a4_episode",
+  "runner": "rrx.baselines.a4.run_a4_episode",
+  "split": "stress"
+}

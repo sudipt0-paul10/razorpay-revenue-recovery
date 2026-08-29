@@ -33,6 +33,19 @@ Canonical arms wired here:
     section's own prose. Implementation: rrx.baselines.a2_variants.
     a2_strengthened_action_for_day (production code, untouched here).
   - A3-D           - dispatches to Stage A's run_a3d_dev_cohort.
+  - A4             (Stage 7.3 addition) - EVAL.md §4's oracle arm, full
+    latent access, same 3-contact budget. Not a `_POLICIES`-registrable
+    policy (needs latent state the standard interface never exposes) - its
+    own episode-loop function, rrx.baselines.a4.run_a4_episode, dispatched
+    directly by run_arm_cohort below, exactly as A3-D is.
+
+Stage 7.3 addition: every dispatch/writer function below now takes an
+explicit `split` parameter (default DEV_SPLIT, so every pre-existing call
+site that omits it is unaffected) rather than hardcoding the "dev" string
+literal - required so this same machinery can run EVAL.md §3.5's `stress`
+split (rrx.harness.splits.stress_indices(), seeds 5000-5299) without
+silently drawing the wrong (non-canonical) CRN world for those indices.
+See rrx.eval.stress for the stress-specific driver that uses this.
 """
 
 from __future__ import annotations
@@ -47,6 +60,7 @@ from typing import Any, Callable, Iterator
 from rrx.agent.ledger import LedgerRecord, to_json_line
 from rrx.baselines.a1 import a1_action_for_day
 from rrx.baselines.a2_variants import a2_strengthened_action_for_day
+from rrx.baselines.a4 import run_a4_episode
 from rrx.eval import runner as eval_runner
 from rrx.eval.runner import run_a3d_dev_cohort
 from rrx.harness.splits import DEV_SPLIT, dev_indices
@@ -60,6 +74,7 @@ ARM_A1 = "A1"  # Content/remedy adopted eval-spec-v1.6 - see ARM_A1_PROVENANCE.
 ARM_A2 = "A2"  # A2-original, frozen in engine._POLICIES already.
 ARM_A2_STRENGTHENED = "A2_STRENGTHENED"  # EVAL.md §4.1.2's adopted A2.
 ARM_A3D = "A3-D"
+ARM_A4 = "A4"  # EVAL.md §4: oracle, empirical upper reference, not a target.
 
 # Arm keys already permanently registered in engine._POLICIES - no
 # temporary registration needed for these.
@@ -131,13 +146,19 @@ def run_policies_cohort(
     population_cfg: dict[str, Any],
     indices: list[int] | range,
     master_seed: int = MASTER_SEED,
+    split: str = DEV_SPLIT,
 ) -> list[EpisodeResult]:
     """Runs `arm_key` through the frozen rrx.sim.engine.run_episode for
     every index, in order. `arm_key` must already be resolvable in
     engine._POLICIES (either permanently, or via `registered_policy` used
-    by the caller / by run_arm_cohort below)."""
+    by the caller / by run_arm_cohort below).
+
+    `split` (Stage 7.3) defaults to DEV_SPLIT - every existing call site
+    that omits it is unaffected - but is threaded through to `run_episode`
+    rather than hardcoded, since `split` feeds the CRN seed derivation
+    (EVAL.md §6) and this dispatcher is not dev-only anymore."""
     return [
-        run_episode("dev", i, arm_key, episode_cfg, population_cfg, master_seed=master_seed)
+        run_episode(split, i, arm_key, episode_cfg, population_cfg, master_seed=master_seed)
         for i in indices
     ]
 
@@ -148,39 +169,54 @@ def run_arm_cohort(
     population_cfg: dict[str, Any],
     indices: list[int] | range,
     master_seed: int = MASTER_SEED,
+    split: str = DEV_SPLIT,
 ) -> tuple[list[EpisodeResult], list[LedgerRecord] | None]:
     """Single dispatch point for every wired arm. Returns (results, ledger)
     - ledger is None (not []) for arms with no ledger mechanism at all,
     signalling "not applicable" rather than "zero records produced" (see
     rrx.eval.runner.LEDGER_METRICS_UNAVAILABLE_FOR_POLICIES_ARMS).
 
-    A0/A1/A2/A3-D all draw from the identical cohort/latent CRN before any
-    policy is consulted (rrx.sim.cohort.sample_cohort_episode /
+    A0/A1/A2/A3-D/A4 all draw from the identical cohort/latent CRN before
+    any policy is consulted (rrx.sim.cohort.sample_cohort_episode /
     rrx.sim.latent.draw_latent_state, called with the same split/i/
     master_seed regardless of arm) - this dispatcher does not, and does
     not need to, do anything additional to guarantee that; it is already
-    true of both underlying runners and is not re-implemented here.
+    true of every underlying runner and is not re-implemented here.
+
+    `split` (Stage 7.3) defaults to DEV_SPLIT - every existing call site
+    that omits it is unaffected - and is threaded to whichever runner
+    `arm_key` dispatches to, so this same function runs the `stress` split
+    (or any other) correctly rather than silently drawing "dev" worlds for
+    non-dev indices.
     """
     if arm_key == ARM_A3D:
         results, ledger = run_a3d_dev_cohort(
-            episode_cfg, population_cfg, indices, master_seed=master_seed
+            episode_cfg, population_cfg, indices, master_seed=master_seed, split=split
         )
         return results, ledger
 
+    if arm_key == ARM_A4:
+        results = [
+            run_a4_episode(split, i, episode_cfg, population_cfg, master_seed=master_seed)
+            for i in indices
+        ]
+        return results, None
+
     if arm_key in _PERMANENT_POLICY_ARMS:
         return run_policies_cohort(
-            arm_key, episode_cfg, population_cfg, indices, master_seed=master_seed
+            arm_key, episode_cfg, population_cfg, indices, master_seed=master_seed, split=split
         ), None
 
     if arm_key in _REGISTERABLE_POLICY_ARMS:
         with registered_policy(arm_key, _REGISTERABLE_POLICY_ARMS[arm_key]):
             return run_policies_cohort(
-                arm_key, episode_cfg, population_cfg, indices, master_seed=master_seed
+                arm_key, episode_cfg, population_cfg, indices,
+                master_seed=master_seed, split=split,
             ), None
 
     raise UnknownArmError(
         f"{arm_key!r} is not a wired arm. Wired: "
-        f"{sorted(_PERMANENT_POLICY_ARMS | set(_REGISTERABLE_POLICY_ARMS) | {ARM_A3D})}."
+        f"{sorted(_PERMANENT_POLICY_ARMS | set(_REGISTERABLE_POLICY_ARMS) | {ARM_A3D, ARM_A4})}."
     )
 
 
@@ -199,8 +235,10 @@ _POLICY_QUALNAME: dict[str, str] = {
     ARM_A1: "rrx.baselines.a1.a1_action_for_day",
     ARM_A2: "rrx.sim.engine.a2_action_for_day",
     ARM_A2_STRENGTHENED: "rrx.baselines.a2_variants.a2_strengthened_action_for_day",
+    ARM_A4: "rrx.baselines.a4.run_a4_episode",
 }
 _POLICIES_RUNNER_PATH = "rrx.sim.engine.run_episode"
+_A4_RUNNER_PATH = "rrx.baselines.a4.run_a4_episode"  # A4 has no separate policy/runner split.
 
 
 def run_official_arm(
@@ -209,9 +247,10 @@ def run_official_arm(
     results_dir: Path | None = None,
     indices: list[int] | None = None,
     master_seed: int = MASTER_SEED,
+    split: str = DEV_SPLIT,
 ) -> Path:
-    """Generalization of rrx.eval.runner.main() to any wired non-A3-D arm -
-    §7's requirement that eventual A1/A2 runs produce run_id/manifest/
+    """Generalization of rrx.eval.runner.main() to any wired arm - §7's
+    requirement that eventual A1/A2 runs produce run_id/manifest/
     run_params/metrics "using the same basic structure" as
     results/a3d-dev-20260828-01/. Reuses Stage A's manifest/run_params/
     metrics machinery verbatim (rrx.eval.runner.write_manifest call,
@@ -219,24 +258,40 @@ def run_official_arm(
     ResultsDirectoryExistsError guard) rather than a second, incompatible
     writer.
 
-    Deliberately refuses arm_key == ARM_A3D - the already-executed A3-D
-    result must only ever be produced via rrx.eval.runner.main(), never
-    through this generalized path, even though the ResultsDirectoryExists
-    Error guard below would already refuse to overwrite it. This function
-    writes NO ledger.jsonl for policies-arms (A0/A2/A2_STRENGTHENED):
-    rrx.sim.engine.run_episode has no ledger mechanism at all (see
+    `split` (Stage 7.3) defaults to DEV_SPLIT - every existing call site
+    that omits it keeps its exact prior behavior - and is threaded to
+    run_arm_cohort/audit_coverage_check/write_run_params, so this same
+    writer also produces correct EVAL.md §3.5 `stress` (or any other
+    split's) artifacts rather than mislabeling them "dev".
+
+    Refuses arm_key == ARM_A3D only when split == DEV_SPLIT: the already-
+    executed DEV A3-D result must only ever be produced via
+    rrx.eval.runner.main(), never through this generalized path (even
+    though the ResultsDirectoryExistsError guard below would already
+    refuse to overwrite that specific run_id). That guard's purpose was
+    always about not re-producing THAT dev result a second, possibly
+    divergent way - it never meant "A3-D can only ever run through
+    main()" - so a non-dev split (e.g. `stress`, which has never been run
+    through either path) is not refused here. This function writes NO
+    ledger.jsonl for policies-arms with no ledger mechanism at all
+    (A0/A2/A2_STRENGTHENED/A4): rrx.sim.engine.run_episode and
+    rrx.baselines.a4.run_a4_episode have no ledger mechanism (see
     rrx.eval.runner.LEDGER_METRICS_UNAVAILABLE_FOR_POLICIES_ARMS) - there
     is nothing to serialize, not an omission.
 
     Per the Stage B brief §8: intended for smoke-scale (≤10-episode)
     exercise via tmp_path in tests, not for the official 2,000-episode
-    comparator runs - this stage does not invoke it at that scale.
+    comparator runs - Stage B itself did not invoke it at that scale.
+    Stage 7.3 is the first caller to run it at official scale, for the
+    300-episode `stress` split specifically (rrx.eval.stress).
     """
-    if arm_key == ARM_A3D:
+    if arm_key == ARM_A3D and split == DEV_SPLIT:
         raise UnknownArmError(
-            "run_official_arm refuses arm_key='A3-D' - the existing A3-D "
-            "result must only be produced via rrx.eval.runner.main(), "
-            "never rerun through this generalized path."
+            "run_official_arm refuses arm_key='A3-D' for split='dev' - the "
+            "existing dev A3-D result must only be produced via "
+            "rrx.eval.runner.main(), never rerun through this generalized "
+            "path. Pass a non-dev split (e.g. stress) if that is genuinely "
+            "what is intended."
         )
 
     results_dir = results_dir or eval_runner.RESULTS_DIR
@@ -254,7 +309,8 @@ def run_official_arm(
 
     start = time.monotonic()
     results, ledger_records = run_arm_cohort(
-        arm_key, episode_cfg, population_cfg, resolved_indices, master_seed=master_seed
+        arm_key, episode_cfg, population_cfg, resolved_indices,
+        master_seed=master_seed, split=split,
     )
     wall_clock_seconds = time.monotonic() - start
 
@@ -271,7 +327,7 @@ def run_official_arm(
         metrics = eval_runner.compute_metrics(results, ledger_records)
         window_days = episode_cfg["episode"]["window_days"]
         metrics["audit_coverage"] = eval_runner.audit_coverage_check(
-            results, resolved_indices, ledger_records, window_days
+            results, resolved_indices, ledger_records, window_days, split=split
         )
 
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -306,12 +362,12 @@ def run_official_arm(
     manifest_path = write_manifest(manifest, run_id, results_dir)
     eval_runner.write_run_params(
         run_dir,
-        split=DEV_SPLIT,
+        split=split,
         indices=resolved_indices,
         master_seed=master_seed,
         arm=arm_key,
         policy=_POLICY_QUALNAME.get(arm_key, "<unknown>"),
-        runner_path=_POLICIES_RUNNER_PATH,
+        runner_path=_A4_RUNNER_PATH if arm_key == ARM_A4 else _POLICIES_RUNNER_PATH,
     )
 
     print(
