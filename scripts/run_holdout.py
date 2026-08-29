@@ -86,11 +86,27 @@ from rrx.harness.splits import HoldoutNotAuthorizedError, holdout_indices  # noq
 from rrx.sim.engine import MASTER_SEED  # noqa: E402
 
 # Pinned to the exact implementation this script is authorized to run
-# under (the Day 8 pre-authorization checkpoint). Updating these three
-# constants is itself a reviewed change to make deliberately if a later
-# provenance-fixing commit supersedes this state - never silently, and
-# never as part of carrying out a holdout attempt.
-IMPLEMENTATION_SHA = "86930b2bdd87f997f0dab2fe6df6a17ba8b69cb7"
+# under. Updating these three constants is itself a reviewed change to
+# make deliberately if a later provenance-fixing commit supersedes this
+# state - never silently, and never as part of carrying out a holdout
+# attempt.
+#
+# IMPLEMENTATION_SHA must equal whatever commit the CURRENT §C1
+# authorization declaration (results/holdout_runs.md, "FINAL
+# AUTHORIZATION DECLARATION" section) names as its Implementation SHA -
+# not whatever HEAD happened to be when this script was last edited.
+#
+# Corrected 86930b2 -> 53bd122 (Day 8 SHA-mismatch fix): this script was
+# originally written against 86930b2 (HEAD at the time), but the
+# authorization declaration committed afterward - itself a new commit,
+# `53bd1223691f0c1c09cce7bb754f123c3f38f38b`, "Authorize Day 8 holdout
+# evaluation" - names 53bd122 as the authorized implementation SHA and is
+# anchored by the annotated tag `holdout-authorized-20260830`. The first
+# authorized invocation was correctly refused by this exact mismatch
+# (HEAD 53bd122 != the then-pinned 86930b2) - the guard did its job; this
+# is the deliberate, reviewed correction to the pinned constant, not a
+# weakening of the check itself.
+IMPLEMENTATION_SHA = "53bd1223691f0c1c09cce7bb754f123c3f38f38b"
 CODE_FREEZE_HOLDOUT_SHA = "4d45db461943978637673a5611a429e0fe826065"
 EVAL_SPEC_V1_10_SHA = "125eae8841562f6d5eccab58e055400340e71af6"
 

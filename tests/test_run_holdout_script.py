@@ -104,6 +104,31 @@ def test_refuses_on_wrong_head(monkeypatch, tmp_path):
     assert exit_code == 1
 
 
+def test_rejects_old_authorized_implementation_sha_and_accepts_current_one(monkeypatch):
+    """Regression test for the Day 8 SHA-mismatch incident: the runner was
+    pinned to 86930b2 (HEAD when the script was written) while the actual
+    §C1 authorization declaration (results/holdout_runs.md, anchored by
+    the holdout-authorized-20260830 tag) names 53bd122 as the authorized
+    implementation SHA. The first authorized invocation was correctly
+    refused by this exact mismatch - proving the guard works - and this
+    test pins both directions so a future edit cannot silently reintroduce
+    a stale pin: the OLD sha must still be rejected, and the CURRENT
+    IMPLEMENTATION_SHA constant (whatever it is pinned to) must be
+    accepted at the precondition-check level."""
+    old_authorized_sha = "86930b2bdd87f997f0dab2fe6df6a17ba8b69cb7"
+    assert run_holdout.IMPLEMENTATION_SHA != old_authorized_sha, (
+        "IMPLEMENTATION_SHA still equals the known-stale SHA from the "
+        "mismatch incident - the fix was not actually applied"
+    )
+
+    monkeypatch.setattr(run_holdout, "_git", _make_fake_git(head=old_authorized_sha))
+    with pytest.raises(run_holdout.PreflightError, match=old_authorized_sha):
+        run_holdout.verify_preconditions()
+
+    monkeypatch.setattr(run_holdout, "_git", _make_fake_git())  # defaults to the current pin
+    run_holdout.verify_preconditions()  # must not raise
+
+
 def test_refuses_on_wrong_freeze_or_spec_tag(monkeypatch, tmp_path):
     monkeypatch.setattr(run_holdout, "_git", _make_fake_git(freeze="1" * 40))
     monkeypatch.setattr(run_holdout, "holdout_indices", _boom_if_called("holdout_indices"))
