@@ -34,6 +34,96 @@ This closes the gap `docs/DAY8-PREFLIGHT-BLOCKER-AUDIT.md` (Issue 3) and `docs/D
 
 ---
 
+## FINAL AUTHORIZATION DECLARATION
+
+**Status: AUTHORIZED. This is the §C1 pre-declaration `docs/DAY8-HOLDOUT-PLAN.md §C` requires before any holdout execution.**
+
+### 1. Authorization timestamp
+
+`2026-08-30T02:52:14+05:30`
+
+### 2. Implementation SHA
+
+`443bb12e9024c916dc21f8e0e690ba76624a4fff`
+
+(Ancestry: `code-freeze-holdout` = `4d45db461943978637673a5611a429e0fe826065`, plus the Day 8 provenance/infrastructure commits on top of it — `9de817e` provenance fixes, `ac82edd` retry-policy documentation, `86930b2` evidentiary files, `443bb12` guarded runner + analysis infrastructure. All four are documentation/tooling additions verified in prior Day 8 sessions to not alter evaluation methodology, metrics, criteria, or simulator/agent behavior.)
+
+### 3. Evaluation contract
+
+`eval-spec-v1.10` — tag resolves to commit `125eae8841562f6d5eccab58e055400340e71af6`.
+
+### 4. Holdout arms — exactly these five
+
+- A0
+- A1
+- A2-strengthened
+- A3-D
+- A4
+
+Per `EVAL.md §7.1` item A: *"The single `holdout` run authorized under §3.5 evaluates exactly five arms: A0, A1, A2-strengthened, A3-D, A4."* (`EVAL.md:885-886`)
+
+### 5. Explicit exclusions
+
+- **A3-LLM** — excluded from `holdout` entirely, for a declared budget reason (`EVAL.md §7.1` item A, `EVAL.md:888-893`), not a performance reason. Where `EVAL.md §7`'s criteria say "A3," they are evaluated on holdout against A3-D only.
+- **A1-U** — diagnostic/scratch arm, explicitly excluded from the comparator and from the holdout arm set (`EVAL.md:774`, `EVAL.md:885-886`). Also has no implementation anywhere in this repository.
+- **A2-original** — retained for transparency on `dev`, not part of the five-arm holdout set.
+- **A2-corrected-v1** — same as A2-original: a `dev`-only transparency variant, not part of the five-arm holdout set.
+
+### 6. Holdout parameters
+
+- Split: `holdout`
+- N: `2000`
+- Seed range: `9000–10999`
+- Master seed: `20260825`
+
+(`src/rrx/harness/splits.py:25-28`; `EVAL.md:232`.)
+
+### 7. Exact execution command
+
+```
+python scripts/run_holdout.py --i-have-authorized-the-holdout
+```
+
+One single invocation runs all five arms sequentially (A0 → A1 → A2-strengthened → A3-D → A4); there is no separate per-arm command. **This command has not been executed as of this declaration.**
+
+### 8. One-run definition
+
+Exactly as committed above (commit `ac82edd`, "Definition: 'one run'" section of this file): one holdout run means one complete execution of one declared arm for the candidate release, tracked per `(arm, attempt)`; "complete" means the arm's full 2,000-episode range finished with every artifact (`manifest.json`, `episode_results.jsonl`, `metrics.json`, `run_params.json`, and `ledger.jsonl` for A3-D) written. Not restated in full here to avoid two documents drifting apart — the section above is authoritative.
+
+### 9. Retry / crash-resume policy
+
+Exactly as committed above (commit `ac82edd`, "Retry / crash-resume policy" section of this file) — restated in summary, not amended:
+
+- Deterministic holdout arms only (A0, A1, A2-strengthened, A3-D, A4) may be replayed, and only after a **genuine execution crash** — never a disagreeable result.
+- **Maximum 2 attempts per arm.** A second failure means stop and report; no third attempt.
+- A replay must use **identical** code, config, seed, split, parameters, and arm definition. A crash requiring a code fix ends the holdout for that arm; the fix is a post-holdout defect record, not a rerun ticket.
+- No selective episode reruns. No rerun of any kind triggered by an observed result, metric, or outcome.
+- Every attempt — successful or crashed — is logged in this file.
+- The A3-LLM-specific carve-out in that policy's item 7 remains present but is **moot for this authorization**, since A3-LLM is excluded from holdout entirely (§5 above).
+
+The section above (lines 21-33 of this file) is authoritative; this is a summary pointer to it, not a second copy that could drift.
+
+### 10. Audit sample rule
+
+Exactly as established in `docs/DAY8-AUDIT-SAMPLE-RULING.md` (committed `443bb12`): applies only to A3-D's `ledger.jsonl` (the one gitignored, per-tick artifact among the five arms); the sample is the 20 episode indices `range(9000, 11000, 100)` = `{9000, 9100, ..., 10900}`, with **every** ledger record present for each — not a fixed count — and a legitimate zero-record episode (`subscription_cancelled_by_customer`) disclosed as-is, never silently dropped or replaced by a substitute index. This rule is **not** rewritten here into an outcome-dependent one; `docs/DAY8-AUDIT-SAMPLE-RULING.md` is authoritative and is not modified by this declaration.
+
+### 11. Holdout access statement
+
+**Holdout has not been accessed prior to this authorization.** `rrx.harness.splits.holdout_indices(authorized=True)` has never been called anywhere in this repository's history as of this declaration (confirmed by `git grep -n "authorized=True"` returning no production call site, re-verified immediately before writing this entry).
+
+### 12. Freeze statement
+
+**The five-arm set, the holdout parameters (split/N/seed-range/master-seed), the retry/crash-resume policy, the one-run definition, the audit-sample rule, and the execution command declared above are frozen as of this authorization and may not be changed afterward based on any observed result.** Per the standing project rule (`EVAL.md:7`): "Any change after the tag is a new tagged version with a changelog entry." A discovered validity defect may still be recorded and acted upon (per `EVAL.md:1133`, the same standard governing `EVAL.md` itself), but no element of this declaration may be altered merely because a holdout number, once observed, is unwelcome.
+
+### 13. Preflight and verification references
+
+- §B preflight (`docs/DAY8-PREFLIGHT-BLOCKER-AUDIT.md`): B1 (repository state; two items flagged — untracked-file cleanliness, since resolved by commits `86930b2`/`443bb12`, and the pre-existing `v1.10`/`v1.11` documentation conflict, `docs/DAY8-FREEZE-CONFLICT.md`, which remains open but is documentation-only and does not alter methodology), B2 PASS (`2240 passed, 1 failed` — the 1 failure reproduces `tests/test_stage5_falsification.py::test_1_policy_ordering`'s pre-existing, byte-identical numbers), B3 PASS (environment/config hashes recorded), B4 PASS (manifest writing, per-episode persistence, ledger completeness, `results/holdout_runs.md` existence all confirmed), B5 PASS (300-episode stress rehearsal, all five arms, zero safety-invariant violations, artifacts correct and isolated).
+- Provenance fixes: commit `9de817e` (per-episode persistence + `spec_version` correction to `eval-spec-v1.10`), verified by 59 focused tests plus the B5 rehearsal.
+- Guarded runner + analysis infrastructure: commit `443bb12` (`scripts/run_holdout.py`, `src/rrx/eval/holdout_analysis.py`), verified by 37 focused tests, ruff clean.
+- No holdout result, metric, or observed number appears anywhere in this declaration or in any commit referenced above.
+
+---
+
 ## Entries
 
-*(No entries yet. No holdout attempt — successful, crashed, or otherwise — has occurred as of this update.)*
+*(No entries yet. No holdout attempt — successful, crashed, or otherwise — has occurred as of this authorization.)*
