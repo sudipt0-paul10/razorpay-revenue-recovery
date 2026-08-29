@@ -134,6 +134,21 @@ TICK_NO_WAKEUP = "no_wakeup"
 TICK_BUDGET_EXHAUSTED = "budget_exhausted"
 TICK_TERMINAL_SUPPRESSED = "terminal_suppressed"
 
+# EVAL.md §7.1 item E (eval-spec-v1.8): the only two remedies the executor
+# has a legal mapping for. Neither the gate's R3 (which only inspects
+# remedy=="card_change") nor any other R1-R8 rule validates that an
+# accepted CONTACT's remedy is one of these - that check belongs at the
+# enforcement layer, not the gate, per the amendment.
+_LEGAL_CONTACT_REMEDIES = frozenset({"card_change", "topup_reminder"})
+
+# EVAL.md §7.1 item E: the distinguishing fallback_reason for a
+# gate-accepted CONTACT the executor cannot honor (remedy=None or
+# unrecognized). Distinct from the pre-existing 5-value fallback_reason
+# enum (docs/A3-DESIGN.md §14) - this is a new, sixth value the amendment
+# requires, not a reuse of "gate_rejected" (a different failure mode: the
+# gate refusing a syntactically-legal-remedy proposal outright).
+FALLBACK_NO_EXECUTOR_MAPPING = "no_executor_mapping"
+
 PolicyFn = Callable[[EpisodeView], Proposal]
 GateFn = Callable[..., GateVerdict]
 LedgerFn = Callable[..., Any]
@@ -319,15 +334,39 @@ def run_episode_a3(
                 )
                 contact_sent_this_tick = True
                 executed_action = {"action_type": "CONTACT", "remedy": "topup_reminder"}
+            elif (
+                exec_gate_verdict.accepted
+                and exec_proposal.action_type == "CONTACT"
+                and exec_proposal.remedy not in _LEGAL_CONTACT_REMEDIES
+            ):
+                # EVAL.md §7.1 item E (eval-spec-v1.8): the gate accepted
+                # this CONTACT (action_type is legal, R1-R8 all passed),
+                # but its remedy is not one of the two the executor holds
+                # a legal mapping for (None or unrecognized).
+                # This is an ENFORCEMENT FAILURE, not a silent downgrade to
+                # WAIT: it must never be conflated with a genuine WAIT
+                # decision or with a gate rejection in the ledger. No
+                # message is sent, so state/budget accounting is untouched
+                # - identical to the WAIT branch's own non-mutation, just
+                # under a distinct, auditable label. Unreachable through
+                # a3d_policy (gate-compliant by construction,
+                # tests/test_a3d_policy.py) and the A3-LLM parser (which
+                # rejects an invalid remedy as schema_violation before a
+                # Proposal is ever constructed, rrx.agent.planner.
+                # parse_llm_output) - reachable only by a policy that
+                # bypasses both, which is exactly the gap this branch
+                # closes at the enforcement layer instead of trusting
+                # caller discipline.
+                fallback_reason = FALLBACK_NO_EXECUTOR_MAPPING
+                executed_action = {"action_type": "ENFORCEMENT_FAILURE"}
             elif exec_gate_verdict.accepted and exec_proposal.action_type == "STOP":
                 episode_stopped = True
                 executed_action = {"action_type": "STOP"}
             else:
-                # WAIT, a rejected/otherwise-unexecutable proposal, or (in
-                # principle unreachable, per the module docstring's
-                # gate-compliance proof) even the fallback itself being
-                # rejected: no state mutation (§3 step 6; §9's executor
-                # table).
+                # WAIT, a rejected proposal, or (in principle unreachable,
+                # per the module docstring's gate-compliance proof) even
+                # the fallback itself being rejected: no state mutation
+                # (§3 step 6; §9's executor table).
                 executed_action = {"action_type": "WAIT"}
 
         # --- step 7: retry check - identical to engine.py:479-482 ---
