@@ -1,5 +1,87 @@
 # Changelog
 
+## eval-spec-v1.9 — stress-split definition corrected to the implemented one — 2026-08-29
+
+Correction-only stage. No simulator, agent, config, or test change. No
+`holdout` index accessed. `eval-spec-v1.8` remains unchanged at
+`7ffb527`; this entry does not rewrite it or any earlier version.
+
+### What changed
+
+| Item | Class | Summary |
+|---|---|---|
+| §3.5 stress row | `CORRECTION` | Stress is now formally defined as an independent invariant check: N=300, seeds 5,000–5,299 |
+| §3.5 stress prose | `CORRECTION` | Unimplemented adversarial-cohort prose removed; stress uses the ordinary frozen population distribution |
+| §3.5 recovery note | `CORRECTION` | Records that stress has now been exercised while holdout remains unexercised |
+| §8 item 8 | `CORRECTION` | Stale all-cancelled-stress reference corrected |
+| A3-DESIGN §20 | `CORRECTION` | Stale all-cancelled-stress verification reference corrected |
+
+### Why this is a correction, not a new experiment
+
+`src/rrx/harness/splits.py::stress_indices()` has always returned
+`range(5000, 5300)`, and the frozen population generator uses the ordinary
+`configs/population.yaml` distribution for that split. No implementation
+of the previously described adversarial cohort construction exists in the
+repository or its git history.
+
+The prior prose was therefore never an operationally reproducible
+definition. Building an adversarial cohort now, after development results
+are known, would introduce a new post-hoc experimental design. This
+correction instead makes the specification match the implementation that
+was actually built and run.
+
+### Evidentiary consequence
+
+This correction is an explicit downgrade in the strength of the stress
+claim. The stress result establishes §5.2 invariant-holding on a third
+independent sample from the frozen population. It does not establish
+robustness to adversarial, shifted, or worst-case populations.
+
+No artifact may describe the Stage 7.3 stress result as adversarial or as
+worst-case robustness evidence.
+
+### What did not change
+
+- N=300.
+- Seeds 5,000–5,299.
+- `configs/population.yaml`.
+- Simulator mechanics.
+- §5.2 invariants.
+- Criterion 1.
+- Holdout arm set or single-use status.
+- Any A3 comparison rule.
+- `eval-spec-v1.8` at `7ffb527`.
+
+### Provenance
+
+The Stage 7.3 stress run was executed against seeds 5,000–5,299 using the
+ordinary population generator. Its artifacts are retained unchanged.
+`eval-spec-v1.9` formally corrects the specification before holdout so
+that the run's actual construction and the normative definition agree.
+
+`docs/A3-DESIGN.md §20` is corrected in this commit because it carried the
+same stale all-cancelled-stress premise and had explicitly marked it as
+pending verification. The verification is now complete.
+
+### Verification required before commit
+
+- `git diff --stat` contains only `EVAL.md`, `CHANGELOG.md`, and
+  `docs/A3-DESIGN.md`.
+- No changes under `src/`, `configs/`, `tests/`, `data/`, `SIM.md`, or
+  results artifacts.
+- `eval-spec-v1.8` remains at `7ffb527`.
+- No new `authorized=True` holdout call site.
+- No holdout artifact exists.
+- No API calls made.
+- The v1.7 comparator/tie-set rule is byte-unchanged.
+- All stale stress-specific references identified in the review are either
+  corrected or explicitly historical/flagged.
+
+### Not done
+
+No holdout run. No sensitivity run. No stress rerun. No simulator or
+agent implementation change. No result numbers changed.
+
 ## eval-spec-v1.8 — pre-holdout scope, undeclared omissions, and one added invariant — 2026-08-29
 
 Pre-registration-only stage. No simulator, agent, config, or test change.

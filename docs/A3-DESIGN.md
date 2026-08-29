@@ -880,18 +880,30 @@ argument, this costs A3 nothing in expectation — `whatsapp`'s multiplier
 contact** — no channel-selection mechanism remains in A3's design at
 all.
 
-**The 5% cancelled-at-open bucket is environment-restraint, not
-agent-restraint, for every arm.** `subscription_cancelled_by_customer`
+**The 5% cancelled-at-open population bucket is environment-restraint,
+not agent-restraint, for every arm.** `subscription_cancelled_by_customer`
 episodes terminate at T=0 before any per-day tick exists
 (`engine.py:438-443`) — not merely before any contact is sent. No arm,
 including A3-D/A3-LLM, is ever invoked for this bucket; the zero-contact
-outcome is structural, identical for A0/A1/A2/A3/A4. This also applies to
-the all-`cancelled` `stress` cohort (`EVAL.md §3.5`). No pitch, README,
+outcome is structural, identical for A0/A1/A2/A3/A4, and holds wherever
+such episodes occur — in `dev`, `holdout`, or `stress` alike, at whatever
+rate the frozen population distribution produces them. No pitch, README,
 or results narrative may cite this bucket's zero-contact rate as evidence
 of A3's judgement or restraint — it demonstrates nothing about the
 policy, deterministic or LLM. See `EVAL.md §8` item 8 (verbatim
-cross-reference) — flagged for definitive verification once the runner
-is implemented.
+cross-reference). This verification is now complete: the runner is
+implemented (this document), and the finding above holds as stated.
+
+`[CORRECTION, eval-spec-v1.9]` The previous version of this paragraph
+additionally stated that this bucket's restraint "also applies to the
+all-`cancelled` `stress` cohort" — implying `stress` was itself composed
+entirely of cancelled-at-open episodes. **`stress` is not, and was never
+implemented as, an all-cancelled cohort.** `EVAL.md §3.5` (`eval-spec-v1.9`)
+corrects this: `stress` is 300 episodes drawn from the ordinary frozen
+population distribution, in which cancelled-at-open episodes occur only
+at their normal population rate (§3.2), the same as in `dev`/`holdout`.
+The dev-bucket conclusion above is unaffected by this correction — it was
+never dependent on `stress`'s composition.
 
 `customer_tenure_days` inert (Task 3A.1 Q5); cross-episode history out of
 scope; unpaired per-message engagement draw documented as variance (§15).
