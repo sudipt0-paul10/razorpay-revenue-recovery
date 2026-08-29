@@ -124,6 +124,57 @@ Exactly as established in `docs/DAY8-AUDIT-SAMPLE-RULING.md` (committed `443bb12
 
 ---
 
+## RE-AUTHORIZATION — CORRECTED IMPLEMENTATION SHA
+
+**Status: RE-AUTHORIZED. This section supersedes only the "Implementation SHA" and execution-readiness aspects of the FINAL AUTHORIZATION DECLARATION above. Every other frozen element of that declaration — arm set, exclusions, holdout parameters, one-run definition, retry/crash-resume policy, audit sample rule — is carried forward unchanged and is not restated in full here to avoid two documents drifting apart.**
+
+### Re-authorization timestamp
+
+`2026-08-30T03:18:06+05:30`
+
+### Reference to the original authorization
+
+This re-authorization references, and does not replace, the **FINAL AUTHORIZATION DECLARATION** above, originally committed at `53bd1223691f0c1c09cce7bb754f123c3f38f38b` ("Authorize Day 8 holdout evaluation") and anchored by the annotated tag `holdout-authorized-20260830`. **That commit and that tag are unchanged, unmoved, and not recreated by this update.** This section exists because the implementation SHA that declaration named — `53bd122` itself — could not actually be executed against, for the reason recorded below.
+
+### Refused execution attempt
+
+The first authorized invocation of `python scripts/run_holdout.py --i-have-authorized-the-holdout`, run against the authorized state (`HEAD = 53bd122`), was **refused by the script's own precondition guard** before reaching any holdout-related code:
+
+```
+HEAD is 53bd1223691f0c1c09cce7bb754f123c3f38f38b,
+expected the authorized implementation 86930b2bdd87f997f0dab2fe6df6a17ba8b69cb7.
+```
+
+This was a bug in `scripts/run_holdout.py` itself: its `IMPLEMENTATION_SHA` constant had been pinned to `86930b2` (HEAD at the time the script was written) and was never updated when the subsequent authorization-declaration commit (`53bd122`) became the actual authorized state. The guard performed correctly — refusing to proceed under a HEAD it did not recognize — and no code path past that check was reached.
+
+**Confirmed: no holdout indices were accessed, `holdout_indices(authorized=True)` was never called, and no holdout data of any kind was read, written, or inspected during this refused attempt.** The refusal occurred at the earliest precondition check, before the script's own index-access line.
+
+Per the retry/crash-resume policy above (item 6): *"Every attempt is logged below, including failed ones."* This was not a simulation crash within a running arm (no arm ever started), but it is logged here in the same spirit — as the honest record of what was attempted and why it did not proceed — rather than left undocumented. It does not count against the policy's "maximum 2 attempts per arm" (item 2), since no arm's execution began; that budget remains fully available.
+
+### Corrective action taken
+
+- `scripts/run_holdout.py`'s `IMPLEMENTATION_SHA` corrected from `86930b2bdd87f997f0dab2fe6df6a17ba8b69cb7` to `53bd1223691f0c1c09cce7bb754f123c3f38f38b`, committed as `659b515` ("Fix holdout authorization SHA guard"), together with a focused regression test (`tests/test_run_holdout_script.py::test_rejects_old_authorized_implementation_sha_and_accepts_current_one`) proving both that the old SHA is still rejected and that the corrected pin is accepted.
+- Diff `53bd122..659b515` inspected and confirmed to touch **only** `scripts/run_holdout.py` and `tests/test_run_holdout_script.py` — no change to `EVAL.md`, `SIM.md`, any `configs/*.yaml`, `data/`, `src/rrx/harness/splits.py`, `src/rrx/sim/`, this file, or `docs/DAY8-AUDIT-SAMPLE-RULING.md`. `CODE_FREEZE_HOLDOUT_SHA`, `EVAL_SPEC_V1_10_SHA`, `HOLDOUT_ARMS`, `HOLDOUT_SPLIT`, and the `MASTER_SEED` import are all unchanged (present in the diff only as unmodified context, never as an added/removed line). The correction is exactly and only the execution-guard's implementation-SHA pin plus its test.
+- 13 focused tests pass (`tests/test_run_holdout_script.py`); ruff clean.
+
+### Corrected executable implementation
+
+**`659b515fe3a2c99e2a3d47ed66700af10d9fea9e` is now the implementation this authorization executes against.** `scripts/run_holdout.py`'s own `IMPLEMENTATION_SHA` constant is the single source of truth for this check going forward — this section records that it was deliberately corrected, not silently.
+
+### What is NOT changed by this re-authorization
+
+The arm set (A0, A1, A2-strengthened, A3-D, A4), the exclusions (A3-LLM, A1-U, A2-original, A2-corrected-v1), the holdout parameters (split=`holdout`, N=`2000`, seed range `9000–10999`, master seed `20260825`), the one-run definition, the retry/crash-resume policy, and the audit sample rule (`docs/DAY8-AUDIT-SAMPLE-RULING.md`) are **all unchanged** from the original declaration. This re-authorization corrects *which commit may execute*, not *what is measured, compared, gated, or logged*.
+
+### Re-authorization statement
+
+**Execution is re-authorized against implementation `659b515`, under the evaluation contract `eval-spec-v1.10` (`125eae8841562f6d5eccab58e055400340e71af6`), on the exact terms already frozen in the FINAL AUTHORIZATION DECLARATION above.** No holdout index has been accessed prior to this re-authorization. The execution command remains:
+
+```
+python scripts/run_holdout.py --i-have-authorized-the-holdout
+```
+
+---
+
 ## Entries
 
-*(No entries yet. No holdout attempt — successful, crashed, or otherwise — has occurred as of this authorization.)*
+- `2026-08-30T03:18:06+05:30` | arm=(none — precondition check, no arm reached) | attempt=1 | status=REFUSED | reason=implementation SHA guard mismatch (HEAD 53bd122 vs pinned 86930b2, since corrected in commit 659b515) | holdout data accessed: no
