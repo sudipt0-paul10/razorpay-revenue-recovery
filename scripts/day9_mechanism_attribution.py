@@ -25,7 +25,7 @@ Usage: python scripts/day9_mechanism_attribution.py
 from __future__ import annotations
 
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -44,22 +44,76 @@ HALT_BOUNDARY_DAY = 3
 #   NONE = none of the three (defensive/forced/default, unrelated to any
 #          advantage source)
 RULE_MECHANISM = {
-    "R-01": {"tags": [], "note": "defensive, structurally unreachable on a real tick (§10A.5)"},
-    "R-02": {"tags": [], "note": "FORCED by gate R4; not an advantage-source mechanism"},
-    "R-03": {"tags": ["RWT"], "note": "FORCED mechanically -- no retry window ever exists for this code"},
-    "R-04": {"tags": ["RWT"], "note": "FORCED -- WAIT because auto-retry window still open"},
-    "R-05": {"tags": ["RWT"], "note": "retries exhausted, window closed"},
-    "R-06": {"tags": ["RWT"], "note": "halted -- window closed"},
-    "R-07": {"tags": ["RWT"], "note": "day>=3 -- window mechanically dead (funds-acceleration proof)"},
-    "R-08": {"tags": ["RWT", "RM"], "note": "topup remedy sent on the earliest in-window day"},
-    "R-09": {"tags": ["RWT", "RM", "AC"], "note": "topup remedy, last in-window day, gated by withhold_applies"},
-    "R-10": {"tags": ["RWT", "AC"], "note": "WAIT; reason_code itself distinguishes RWT (retry_window_open) from AC (no_engagement_restraint)"},
-    "R-11": {"tags": ["RM"], "note": "post-halt remedy match, explicitly EXEMPT from the withhold test (§10A.5 [D-7])"},
-    "R-12": {"tags": ["RM"], "note": "day-0 remedy match, fixed schedule (adopted from A2), not withhold-gated"},
-    "R-13": {"tags": ["RM", "AC"], "note": "day-3 remedy match, gated by withhold_applies -- the Stage 2 divergence rule"},
-    "R-14": {"tags": ["RM"], "note": "day-0 fail-safe remedy, not withhold-gated"},
-    "R-15": {"tags": ["RM", "AC"], "note": "day-2 hedge remedy, gated by withhold_applies"},
-    "R-16": {"tags": [], "note": "named default/fallthrough -- diagnostic only, not itself an advantage-source mechanism"},
+    "R-01": {
+        "tags": [],
+        "note": "defensive, structurally unreachable on a real tick (§10A.5)",
+    },
+    "R-02": {
+        "tags": [],
+        "note": "FORCED by gate R4; not an advantage-source mechanism",
+    },
+    "R-03": {
+        "tags": ["RWT"],
+        "note": "FORCED mechanically -- no retry window ever exists for this code",
+    },
+    "R-04": {
+        "tags": ["RWT"],
+        "note": "FORCED -- WAIT because auto-retry window still open",
+    },
+    "R-05": {
+        "tags": ["RWT"],
+        "note": "retries exhausted, window closed",
+    },
+    "R-06": {
+        "tags": ["RWT"],
+        "note": "halted -- window closed",
+    },
+    "R-07": {
+        "tags": ["RWT"],
+        "note": "day>=3 -- window mechanically dead (funds-acceleration proof)",
+    },
+    "R-08": {
+        "tags": ["RWT", "RM"],
+        "note": "topup remedy sent on the earliest in-window day",
+    },
+    "R-09": {
+        "tags": ["RWT", "RM", "AC"],
+        "note": "topup remedy, last in-window day, gated by withhold_applies",
+    },
+    "R-10": {
+        "tags": ["RWT", "AC"],
+        "note": (
+            "WAIT; reason_code itself distinguishes RWT (retry_window_open) "
+            "from AC (no_engagement_restraint)"
+        ),
+    },
+    "R-11": {
+        "tags": ["RM"],
+        "note": "post-halt remedy match, explicitly EXEMPT from the withhold test (§10A.5 [D-7])",
+    },
+    "R-12": {
+        "tags": ["RM"],
+        "note": "day-0 remedy match, fixed schedule (adopted from A2), not withhold-gated",
+    },
+    "R-13": {
+        "tags": ["RM", "AC"],
+        "note": "day-3 remedy match, gated by withhold_applies -- the Stage 2 divergence rule",
+    },
+    "R-14": {
+        "tags": ["RM"],
+        "note": "day-0 fail-safe remedy, not withhold-gated",
+    },
+    "R-15": {
+        "tags": ["RM", "AC"],
+        "note": "day-2 hedge remedy, gated by withhold_applies",
+    },
+    "R-16": {
+        "tags": [],
+        "note": (
+            "named default/fallthrough -- diagnostic only, not itself an "
+            "advantage-source mechanism"
+        ),
+    },
 }
 
 
@@ -112,8 +166,12 @@ def main() -> None:
     # ---- Contact timing relative to the retry/halt boundary (day 3) ----
     contacts = [r for r in wakeups if r["executed_action"]["action_type"] == "CONTACT"]
     contact_tick_hist = Counter(r["tick"] for r in contacts)
-    contacts_within_or_at_boundary = sum(v for k, v in contact_tick_hist.items() if k <= HALT_BOUNDARY_DAY)
-    contacts_after_boundary = sum(v for k, v in contact_tick_hist.items() if k > HALT_BOUNDARY_DAY)
+    contacts_within_or_at_boundary = sum(
+        v for k, v in contact_tick_hist.items() if k <= HALT_BOUNDARY_DAY
+    )
+    contacts_after_boundary = sum(
+        v for k, v in contact_tick_hist.items() if k > HALT_BOUNDARY_DAY
+    )
 
     # ---- Withhold-at-T+3: WAIT/STOP with reason_code=no_engagement_restraint at tick==3 ----
     withhold_at_t3 = [
@@ -146,7 +204,12 @@ def main() -> None:
         reason_code = r["reason_code"]
         admissible = ADMISSIBLE_DECLINE_CODES.get(reason_code, frozenset())
         if decline_code not in admissible:
-            mismatches.append({"episode_id": r["episode_id"], "tick": r["tick"], "reason_code": reason_code, "decline_code": decline_code})
+            mismatches.append({
+                "episode_id": r["episode_id"],
+                "tick": r["tick"],
+                "reason_code": reason_code,
+                "decline_code": decline_code,
+            })
 
     # ---- Mechanism-3: adaptive-contact firing by day (AC-tagged rules only) ----
     ac_rules = {rid for rid, m in RULE_MECHANISM.items() if "AC" in m["tags"]}
@@ -175,8 +238,12 @@ def main() -> None:
             idx = int(r["episode_id"].split("-")[1])
             dc = a3d_results[idx]["opening_condition_key"]
             r16_t3_by_decline[dc] += 1
-    r16_t3_ac_attributable = sum(v for k, v in r16_t3_by_decline.items() if k in CARD_BROKEN)
-    r16_t3_not_ac_attributable = sum(v for k, v in r16_t3_by_decline.items() if k not in CARD_BROKEN)
+    r16_t3_ac_attributable = sum(
+        v for k, v in r16_t3_by_decline.items() if k in CARD_BROKEN
+    )
+    r16_t3_not_ac_attributable = sum(
+        v for k, v in r16_t3_by_decline.items() if k not in CARD_BROKEN
+    )
 
     result = {
         "rule_firing_distribution_all_wakeups": dict(rule_counts),
@@ -239,9 +306,16 @@ def main() -> None:
     print("\n=== Summary ===")
     print("rule_firing_distribution_all_wakeups:", rule_counts)
     print("mechanism_totals_all_wakeups:", mechanism_totals)
-    print("contacts within/at day3:", contacts_within_or_at_boundary, "after day3:", contacts_after_boundary)
+    print(
+        "contacts within/at day3:", contacts_within_or_at_boundary,
+        "after day3:", contacts_after_boundary,
+    )
     print("withhold_at_t3_count:", len(withhold_at_t3), "by rule:", withhold_at_t3_by_rule)
-    print("withhold_in_window(1-3):", withhold_in_window, "after_window(>3):", withhold_after_window, "at_day0:", withhold_at_day0)
+    print(
+        "withhold_in_window(1-3):", withhold_in_window,
+        "after_window(>3):", withhold_after_window,
+        "at_day0:", withhold_at_day0,
+    )
     print("remedy_mismatch_count:", len(mismatches), "of", len(contacts), "contacts checked")
     print("Stage2 Bucket A rederivation + rule-at-last-wakeup:", json.dumps(stage2_cross, indent=2))
 

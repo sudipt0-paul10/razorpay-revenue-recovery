@@ -89,7 +89,9 @@ def main() -> None:
 
     for comp_key in COMPARATORS:
         comp_results = load_episode_results(HOLDOUT_ROOT / comp_key)
-        assert len(comp_results) == 2000, f"expected 2000 {comp_key} episodes, got {len(comp_results)}"
+        assert len(comp_results) == 2000, (
+            f"expected 2000 {comp_key} episodes, got {len(comp_results)}"
+        )
 
         # Exact index-set parity check (join integrity)
         idx_a3d = set(a3d_results.keys())
@@ -147,7 +149,9 @@ def main() -> None:
         ]
 
         # reconciliation
-        reconciled_comp_only = len(bucket_A) + len(bucket_E_same_contacts) + len(bucket_E_more_contacts)
+        reconciled_comp_only = (
+            len(bucket_A) + len(bucket_E_same_contacts) + len(bucket_E_more_contacts)
+        )
         recon_ok = reconciled_comp_only == len(comp_only)
 
         # ---- Stratifications over comp_only (deficit population) ----
@@ -230,7 +234,13 @@ def main() -> None:
                 },
                 "C_same_contacts_timing": {
                     "status": "NOT IDENTIFIABLE from available artifacts",
-                    "reason": "Neither a1 nor a2_strengthened produces a ledger or any per-day contact record; only a total contacts_sent per episode exists for those arms. Episodes with equal contact counts but differing outcomes are routed to Bucket E and reported there as 'same_contacts' for transparency.",
+                    "reason": (
+                        "Neither a1 nor a2_strengthened produces a ledger or any "
+                        "per-day contact record; only a total contacts_sent per "
+                        "episode exists for those arms. Episodes with equal contact "
+                        "counts but differing outcomes are routed to Bucket E and "
+                        "reported there as 'same_contacts' for transparency."
+                    ),
                     "would_be_count_if_not_excluded": len(bucket_E_same_contacts),
                 },
                 "E_other_unexplained": {
@@ -247,8 +257,12 @@ def main() -> None:
                         "examples": examples(bucket_E_more_contacts),
                     },
                     "total_count": len(bucket_E_same_contacts) + len(bucket_E_more_contacts),
-                    "total_pct_of_paired": (len(bucket_E_same_contacts) + len(bucket_E_more_contacts)) / n_total,
-                    "total_contribution_to_rate_diff": (len(bucket_E_same_contacts) + len(bucket_E_more_contacts)) / n_total,
+                    "total_pct_of_paired": (
+                        (len(bucket_E_same_contacts) + len(bucket_E_more_contacts)) / n_total
+                    ),
+                    "total_contribution_to_rate_diff": (
+                        (len(bucket_E_same_contacts) + len(bucket_E_more_contacts)) / n_total
+                    ),
                 },
             },
             "reconciliation": {
@@ -256,9 +270,19 @@ def main() -> None:
                 "sum_A_plus_E": reconciled_comp_only,
                 "matches": recon_ok,
                 "a3d_only_count": len(a3d_only),
-                "signed_check_rate_diff": (len(bucket_A) + len(bucket_E_same_contacts) + len(bucket_E_more_contacts) - len(a3d_only)) / n_total,
+                "signed_check_rate_diff": (
+                    (
+                        len(bucket_A) + len(bucket_E_same_contacts)
+                        + len(bucket_E_more_contacts) - len(a3d_only)
+                    ) / n_total
+                ),
                 "matches_pairwise_rate_diff": abs(
-                    ((len(bucket_A) + len(bucket_E_same_contacts) + len(bucket_E_more_contacts) - len(a3d_only)) / n_total)
+                    (
+                        (
+                            len(bucket_A) + len(bucket_E_same_contacts)
+                            + len(bucket_E_more_contacts) - len(a3d_only)
+                        ) / n_total
+                    )
                     - rate_diff_from_pairs
                 )
                 < 1e-12,
@@ -299,14 +323,30 @@ def main() -> None:
     for comp_key, r in all_out.items():
         print(f"\n=== {comp_key} ===")
         print("confusion_matrix:", r["confusion_matrix"])
-        print("rate_diff_from_pairs (comparator - a3d):", r["rate_diff_from_pairs_comparator_minus_a3d"])
+        print(
+            "rate_diff_from_pairs (comparator - a3d):",
+            r["rate_diff_from_pairs_comparator_minus_a3d"],
+        )
         b = r["buckets"]
-        print("Bucket A (fewer contacts, lost):", b["A_fewer_contacts_lost"]["count"])
-        print("  D1 (STOP-attributable):", b["A_fewer_contacts_lost"]["D1_stop_attributable"]["count"])
-        print("  D2 (other fewer-contact loss):", b["A_fewer_contacts_lost"]["D2_other_fewer_contact_loss"]["count"])
-        print("Bucket B (fewer contacts, preserved, context):", b["B_fewer_contacts_recovery_preserved_context_only"]["count"])
-        print("Bucket C: NOT IDENTIFIABLE; same-contacts count folded into E:", b["C_same_contacts_timing"]["would_be_count_if_not_excluded"])
-        print("Bucket E total (same-contacts + more-contacts):", b["E_other_unexplained"]["total_count"])
+        a_bucket = b["A_fewer_contacts_lost"]
+        print("Bucket A (fewer contacts, lost):", a_bucket["count"])
+        print("  D1 (STOP-attributable):", a_bucket["D1_stop_attributable"]["count"])
+        print(
+            "  D2 (other fewer-contact loss):",
+            a_bucket["D2_other_fewer_contact_loss"]["count"],
+        )
+        print(
+            "Bucket B (fewer contacts, preserved, context):",
+            b["B_fewer_contacts_recovery_preserved_context_only"]["count"],
+        )
+        print(
+            "Bucket C: NOT IDENTIFIABLE; same-contacts count folded into E:",
+            b["C_same_contacts_timing"]["would_be_count_if_not_excluded"],
+        )
+        print(
+            "Bucket E total (same-contacts + more-contacts):",
+            b["E_other_unexplained"]["total_count"],
+        )
         print("Reconciliation:", r["reconciliation"])
 
 

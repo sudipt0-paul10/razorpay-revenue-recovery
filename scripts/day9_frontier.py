@@ -74,28 +74,52 @@ def make_a3d_policy_variant(withhold_threshold: int):
         withhold_applies = observations >= withhold_threshold and not any_engaged
 
         if view.subscription_state == "active":
-            return Proposal(action_type="STOP", remedy=None, rationale="R-01", reason_code=NO_ENGAGEMENT_RESTRAINT)
+            return Proposal(
+                action_type="STOP", remedy=None,
+                rationale="R-01", reason_code=NO_ENGAGEMENT_RESTRAINT,
+            )
 
         if view.decline_code == "payment_risk_check_failed":
-            return Proposal(action_type="STOP", remedy=None, rationale="R-02", reason_code=RISK_FLAGGED)
+            return Proposal(
+                action_type="STOP", remedy=None,
+                rationale="R-02", reason_code=RISK_FLAGGED,
+            )
 
         if view.decline_code == "transaction_limit_exceeded":
-            return Proposal(action_type="STOP", remedy=None, rationale="R-03", reason_code=NO_ENGAGEMENT_RESTRAINT)
+            return Proposal(
+                action_type="STOP", remedy=None,
+                rationale="R-03", reason_code=NO_ENGAGEMENT_RESTRAINT,
+            )
 
         if view.decline_code == "bank_technical_error" and view.auto_retries_remaining > 0:
-            return Proposal(action_type="WAIT", remedy=None, rationale="R-04", reason_code=RETRY_WINDOW_OPEN)
+            return Proposal(
+                action_type="WAIT", remedy=None,
+                rationale="R-04", reason_code=RETRY_WINDOW_OPEN,
+            )
 
         if view.decline_code == "bank_technical_error":
-            return Proposal(action_type="STOP", remedy=None, rationale="R-05", reason_code=NO_ENGAGEMENT_RESTRAINT)
+            return Proposal(
+                action_type="STOP", remedy=None,
+                rationale="R-05", reason_code=NO_ENGAGEMENT_RESTRAINT,
+            )
 
         if view.decline_code == "insufficient_funds" and view.subscription_state == "halted":
-            return Proposal(action_type="STOP", remedy=None, rationale="R-06", reason_code=NO_ENGAGEMENT_RESTRAINT)
+            return Proposal(
+                action_type="STOP", remedy=None,
+                rationale="R-06", reason_code=NO_ENGAGEMENT_RESTRAINT,
+            )
 
         if view.decline_code == "insufficient_funds" and day >= 3:
-            return Proposal(action_type="STOP", remedy=None, rationale="R-07", reason_code=NO_ENGAGEMENT_RESTRAINT)
+            return Proposal(
+                action_type="STOP", remedy=None,
+                rationale="R-07", reason_code=NO_ENGAGEMENT_RESTRAINT,
+            )
 
         if view.decline_code == "insufficient_funds" and day == 0:
-            return Proposal(action_type="CONTACT", remedy="topup_reminder", rationale="R-08", reason_code=REMEDY_MATCH_TOPUP)
+            return Proposal(
+                action_type="CONTACT", remedy="topup_reminder",
+                rationale="R-08", reason_code=REMEDY_MATCH_TOPUP,
+            )
 
         if view.decline_code == "insufficient_funds" and day == 2 and not withhold_applies:
             return Proposal(
@@ -115,10 +139,16 @@ def make_a3d_policy_variant(withhold_threshold: int):
             and day == 5
             and view.budget_remaining >= 1
         ):
-            return Proposal(action_type="CONTACT", remedy="card_change", rationale="R-11", reason_code=POST_HALT_RESCUE)
+            return Proposal(
+                action_type="CONTACT", remedy="card_change",
+                rationale="R-11", reason_code=POST_HALT_RESCUE,
+            )
 
         if view.decline_code in CARD_BROKEN and day == 0:
-            return Proposal(action_type="CONTACT", remedy="card_change", rationale="R-12", reason_code=REMEDY_MATCH_CARD)
+            return Proposal(
+                action_type="CONTACT", remedy="card_change",
+                rationale="R-12", reason_code=REMEDY_MATCH_CARD,
+            )
 
         if view.decline_code in CARD_BROKEN and day == 3 and not withhold_applies:
             return Proposal(
@@ -127,12 +157,21 @@ def make_a3d_policy_variant(withhold_threshold: int):
             )
 
         if view.decline_code == "ambiguous_decline" and day == 0:
-            return Proposal(action_type="CONTACT", remedy="card_change", rationale="R-14", reason_code=REMEDY_MATCH_CARD)
+            return Proposal(
+                action_type="CONTACT", remedy="card_change",
+                rationale="R-14", reason_code=REMEDY_MATCH_CARD,
+            )
 
         if view.decline_code == "ambiguous_decline" and day == 2 and not withhold_applies:
-            return Proposal(action_type="CONTACT", remedy="topup_reminder", rationale="R-15", reason_code=REMEDY_MATCH_TOPUP)
+            return Proposal(
+                action_type="CONTACT", remedy="topup_reminder",
+                rationale="R-15", reason_code=REMEDY_MATCH_TOPUP,
+            )
 
-        return Proposal(action_type="WAIT", remedy=None, rationale="R-16", reason_code=NO_ENGAGEMENT_RESTRAINT)
+        return Proposal(
+            action_type="WAIT", remedy=None,
+            rationale="R-16", reason_code=NO_ENGAGEMENT_RESTRAINT,
+        )
 
     return _policy
 
@@ -170,7 +209,10 @@ def run_variant_over_dev(withhold_threshold: int):
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("=== Parity check: withhold_threshold=2 must reproduce results/a3d-dev-20260828-01/metrics.json ===")
+    print(
+        "=== Parity check: withhold_threshold=2 must reproduce "
+        "results/a3d-dev-20260828-01/metrics.json ==="
+    )
     baseline_metrics = run_variant_over_dev(BASELINE_THRESHOLD)
     with open(BASELINE_REFERENCE_METRICS_PATH, encoding="utf-8") as f:
         reference = json.load(f)
@@ -190,12 +232,18 @@ def main() -> None:
         print("PARITY CHECK FAILED. Mismatches:")
         for field, got, expected in mismatches:
             print(f"  {field}: variant={got!r} reference={expected!r}")
-        print("STOPPING -- not trusting sweep results. Fix the variant transcription before rerunning.")
+        print(
+            "STOPPING -- not trusting sweep results. "
+            "Fix the variant transcription before rerunning."
+        )
         with open(OUT_DIR / "PARITY_CHECK_FAILED.json", "w", encoding="utf-8") as f:
             json.dump({"mismatches": mismatches}, f, indent=2)
         return
 
-    print("PARITY CHECK PASSED -- variant at threshold=2 reproduces the published A3-D dev result exactly.")
+    print(
+        "PARITY CHECK PASSED -- variant at threshold=2 reproduces "
+        "the published A3-D dev result exactly."
+    )
 
     frontier = {}
     for threshold in GRID:
@@ -221,7 +269,10 @@ def main() -> None:
         sig = (m["invoice_recovery_rate"], m["subscription_rescue_rate"], m["total_contacts"])
         seen.setdefault(sig, []).append(threshold)
     for sig, thresholds in seen.items():
-        print(f"  thresholds {thresholds}: invoice={sig[0]:.4f} rescue={sig[1]:.4f} contacts={sig[2]}")
+        print(
+            f"  thresholds {thresholds}: invoice={sig[0]:.4f} "
+            f"rescue={sig[1]:.4f} contacts={sig[2]}"
+        )
 
 
 if __name__ == "__main__":
