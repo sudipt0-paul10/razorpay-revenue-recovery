@@ -29,6 +29,18 @@ On the frozen `holdout` split, the pre-registered candidate arm **A3-D failed th
 - **Checksum manifest:** `results/holdout/4d45db461943/SHA256SUMS` — SHA-256 over all 21 artifacts in the run directory, including the gitignored `a3_d/ledger.jsonl` (58,559 records, 0 malformed lines).
 - **Independent verification performed twice** (once at seal time, once immediately before writing this document) via `rrx.eval.holdout_analysis.load_arm_data()`: for every arm, `episode_results.jsonl` contains exactly 2,000 records with the exact declared index set, and every metric independently recomputed from those raw records matches the committed `metrics.json` byte-for-byte. Both passes completed with zero `ArtifactError`s.
 
+## 3A. Criterion-by-criterion verdict (all five, `EVAL.md §7`)
+
+| # | Criterion (`EVAL.md` definition) | Verdict | Basis |
+|---|---|---|---|
+| 1 | All §5.2 invariants hold on `dev`, `holdout`, `stress` (`EVAL.md:773`, extended `EVAL.md:989-1001`) | **PASS** | Zero safety-invariant violations and zero audit-coverage violations on all three splits for A3-D (`results/a3d-dev-20260828-01/metrics.json`, `results/stress_summary.json`, `results/holdout/4d45db461943/a3_d/metrics.json` — see §10 below). Item E (legal executor mapping) is structurally unreachable for A3-D by construction and covered by `tests/test_executor_mapping_enforcement.py`. |
+| 2 | Per primary metric, A3(-D) exceeds every member of the holdout comparator set, 95% CI excluding zero (`EVAL.md:774`, tie-set rule `EVAL.md:821-841`) | **FAIL** | Both metrics; see §7 below. A3-D scored significantly *below* its comparator set on both. |
+| 3 | Total contacts and contacts/rescue ≤ same comparator arm(s) as criterion 2 (`EVAL.md:775`) | **PASS** | Both metrics; see §8 below. Moot given criterion 2's failure. |
+| 4 | Uplift attributable to §3.4 structures, unexplained residual reported (`EVAL.md:776`; sole defined procedure at `EVAL.md:387-390` is A3-LLM − A3-D) | **N/A (holdout)** | A3-LLM was excluded from holdout for budget reasons (`EVAL.md:888-893`), and no A3-LLM holdout outcome may be inferred, estimated, or projected under any circumstance (`EVAL.md:903-907`). Criterion 4's only defined input is therefore unavailable by design, not by omission. A dev-only, N=500 A3-LLM − A3-D comparison exists (`results/tuning_log.md`) but is explicitly a "development-only secondary result... not scored against §7" (`EVAL.md:900-902`) and cannot substitute. |
+| 5 | Graceful handling of three injected failure modes, failure visible in the ledger (`EVAL.md:777`, satisfied via stubbed planner per `EVAL.md:973-980`) | **N/A (holdout)** | Two of the three modes are LLM-planner faults; A3-D has no planner call at all (`EVAL.md:373-374`), so neither is a possible event on the arm that actually ran on holdout. `EVAL.md:897-898` lists A3-D as "the arm subject to criteria 1–4" — criterion 5 is not among them. All three modes are instead demonstrated at dev level against a stubbed planner (`LIMITATIONS.md §2.1`–§2.3, full test citations there); the mid-episode state-change mode is separately architecturally unreachable in `sim-v1` regardless of split. |
+
+**On criteria 4 and 5 reading "N/A" rather than "FAIL":** neither failure is a result of A3-D underperforming or the harness misbehaving — both are consequences of the pre-declared, budget-driven decision (`EVAL.md §7.1` item A) to exclude A3-LLM from holdout, made before any holdout access and independent of any measured result. Marking them FAIL would misrepresent a scope exclusion as a missed criterion; marking them PASS would claim evidence that does not exist and that `EVAL.md` explicitly forbids fabricating. N/A is the accurate reading of the frozen text.
+
 ## 4. Per-arm primary metrics
 
 | Arm | Invoice recovery rate | Subscription rescue rate | Total contacts | Contacts / invoice recovered | Contacts / subscription rescued |
@@ -76,7 +88,7 @@ Criterion 2 requires A3-D's holdout rate to exceed **every** comparator-set memb
 | Invoice recovery rate | 0.4685 | 0.5245 | 0.0560 | 0.4909 | 0.4425 | **No** (0.0484 below) |
 | Subscription rescue rate | 0.5190 | 0.5445 | 0.0255 | 0.5292 | 0.5085 | **No** (0.0207 below) |
 
-This target, per `EVAL.md §7`'s own text, is "a target, not an expectation" and is separate from the three pre-registered pass/fail criteria (1, 2, 3). A4 supplies the oracle rate for this calculation only; A4 is an empirical upper reference (`EVAL.md §7`: "not a deployable comparator") and is not itself evaluated against any criterion.
+This target, per `EVAL.md §7`'s own text, is "a target, not an expectation" and is separate from the criteria evaluated against comparators on holdout (criteria 1–3; see §3A above for the full five-criterion verdict, including why criteria 4 and 5 are N/A on holdout). A4 supplies the oracle rate for this calculation only; A4 is an empirical upper reference (`EVAL.md §7`: "not a deployable comparator") and is not itself evaluated against any criterion.
 
 ## 10. A3-D safety-invariant context (not a new criterion)
 
