@@ -10,7 +10,16 @@ requires-python = ">=3.13"
 dependencies = ["pyyaml>=6.0", "numpy==2.5.2"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+# httpx/openai are test-scaffolding, not a runtime dependency of anything
+# under src/: tests/test_openai_client_offline.py imports both at module
+# level (unconditionally) to construct real httpx.Request/Response objects
+# and real openai.RateLimitError/APIConnectionError/APITimeoutError
+# instances for its mocked-API-error tests - unlike src/rrx/agent/
+# openai_client.py, which only imports openai lazily inside complete() (see
+# the `live` comment below). openai==3.5.0's own declared dependency is
+# httpx2, not httpx, so httpx must be listed explicitly - it is not pulled
+# in transitively by installing openai alone.
+dev = ["pytest>=8", "ruff>=0.6", "httpx", "openai==3.5.0"]
 # Deliberately NOT a hard dependency. tests/test_razorpay_test_mode.py
 # ::test_guard_is_offline asserts razorpay is absent from sys.modules; if the
 # SDK were installed by default that assertion would weaken from "cannot be
