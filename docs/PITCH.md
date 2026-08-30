@@ -2,96 +2,106 @@
 
 *Razorpay AI Buildathon, Track 03 — AI Revenue Recovery*
 
+**This document is the final 5-minute pitch/demo script.** It supersedes the previous longer prose pitch — the same facts, restructured for spoken delivery. Every number below is cross-checked against `RESULTS.md` (frozen holdout) or `docs/analysis/DAY9-*.md` (post-hoc diagnostics) at the citation given. 680 spoken words ≈ 4:51 at a conservative 140 words/minute, ≈4:32 at a brisker 150 — under the 5-minute cap either way. Timestamps below are cumulative estimates at 140 wpm. Presenter cues are in `[brackets]` and are not spoken.
+
+**The story, in one line:** we built a constrained recovery agent, froze the evaluation before looking at holdout, found the frozen policy lost on its primary metric, diagnosed exactly why, quantified the economic cost, and used dev-only experiments to show the loss was a tuning problem rather than a ceiling — without touching the sealed holdout to "fix" the number.
+
 ---
 
-## 1. One-sentence hook
+## Script
 
-When a subscription payment fails, Razorpay already retries the charge automatically on a fixed schedule — the only open question is whether *contacting the customer* helps or just annoys them, and we built a rigorously pre-registered evaluation to answer that question honestly, including when the answer is "not yet."
+### 1. Hook / Problem — `0:00–0:26`
 
-## 2. Problem
+> When a subscription payment fails, Razorpay already retries the charge automatically — the merchant can't touch that. What the merchant *does* control is whether to contact the customer, and when to stop. Contact costs money and risks annoying someone into cancelling outright. Contacting forever isn't a strategy — it's noise. The real problem is deciding when contact is actually worth it.
 
-When a customer's subscription payment fails, Razorpay's own systems retry the charge automatically, on a fixed schedule the merchant cannot control or trigger (`EVAL.md §1.1`). What the merchant *can* still do is decide **whether to contact the customer, when, on which channel, with which remedy — and when to stop** (`EVAL.md §1.2`). Get this wrong in one direction and you contact customers with the wrong remedy (prompting a card update for a balance problem helps nobody); get it wrong in the other direction and over-contacting risks the customer cancelling outright, which forfeits not just the one invoice but the subscription's entire remaining lifetime. There are two genuinely different outcomes worth recovering, and they are not the same thing (`EVAL.md §1.3`):
+### 2. What We Built — `0:26–0:56`
 
-- **Invoice recovery** — the specific failed charge gets paid.
-- **Subscription rescue** — the subscription itself returns to `active`, even if that one invoice is lost for good.
+`[cue: show docs/architecture/revenue-recovery-architecture.svg]`
 
-## 3. Solution
+> We built a simulator, an evaluation harness, and a recovery agent. Each tick, the agent sees an `EpisodeView` — decline reason, retry status, contact history, nothing hidden. It proposes an action; a safety gate checks eight hard rules — no contacting cancelled subscriptions, no wrong remedy, no exceeding budget — before an executor acts and every decision is ledger-recorded. Policy proposes, gate validates, executor acts, ledger records. Safety isn't optional here.
 
-We built a recovery agent that decides, per customer per day, whether to send a contact, which of two remedies to send (a card-change prompt or a top-up reminder), or to wait — under a fixed contact budget shared by every arm we tested. The core design bet is **restraint**: contacting a customer isn't free (annoyance risk, cancellation hazard), so an agent that recovers the same number of invoices with fewer, better-targeted contacts is doing something a naive "contact everyone, twice" policy cannot. Restraint by itself isn't the win condition, though — it only matters if it also produces *more* invoices recovered and subscriptions rescued, at equal or lower contact cost. That is exactly what we pre-registered as the bar to clear, and it is exactly the number we report honestly below.
+### 3. AI / LLM Component — `0:56–1:18`
 
-## 4. How it works
+> We also built and tuned an LLM planner, A3-LLM, on GPT-5-mini — real API calls, real ledgers, six configurations at 500 episodes each. But the policy we froze and evaluated, A3-D, is fully deterministic — a sixteen-rule table, no network call. A3-LLM never touched holdout. Zero claim of LLM holdout performance.
 
-```
-simulator → episode → agent → decision → recovery/contact → outcome
-```
+### 4. Evaluation Discipline — `1:18–1:49`
 
-A synthetic **simulator** generates a population of failed-payment episodes from a frozen configuration — no real customer or merchant data anywhere in this project. Each **episode** starts with a subscription entering `pending` after a failed auto-charge, carrying hidden ("latent") state — like whether the card is actually broken, or funds are just temporarily short — that the **agent** never sees directly. Instead, the agent observes an `EpisodeView`: the subscription's declared failure reason, days since failure, auto-retry status, and its own contact history so far. From that, it makes a **decision**: contact now (with a specific remedy), wait, or stop. If it contacts, that becomes a **recovery/contact** event in the simulated world, which may or may not resolve the underlying problem depending on what's actually wrong. At the end of a 30-day window, every episode produces an **outcome**: did the invoice get paid, and did the subscription survive.
+> Before touching holdout data, we froze the entire evaluation contract — criteria, comparator rules, statistics — all tagged in git. Dev and holdout use separate seed ranges; holdout is single-use, checksummed and sealed the moment it runs. Every arm sees an identical simulated world through common-random-number pairing, so differences come from decisions, not luck. We track recovery rate, rescue rate, contacts, and eight safety invariants. No tuning after that seal — ever.
 
-## 5. What we tested
+### 5. Results — `1:49–2:19`
 
-Five arms, run over the identical episodes, the identical simulated worlds, and the identical 3-contact budget, so any difference between them is attributable to decision quality, not luck or a bigger budget:
+`[cue: show the results table from RESULTS.md]`
 
-| Arm | What it does |
-|---|---|
-| **A0** | Does nothing — the floor. Razorpay's own automatic retry and failure email still happen. |
-| **A1** | Naive dunning: the same two contacts to every customer, always the same remedy, no judgment at all. |
-| **A2-strengthened** | A competent, condition-aware fixed rulebook — the strongest non-agent baseline we built. |
-| **A3-D** | Our deterministic recovery agent — a 16-rule decision table that reads the observable episode state and adapts. |
-| **A4** | An oracle with full hidden-state visibility — **not deployable, not a target** — purely a reference for "how much headroom exists at all." |
+| Arm | Invoice recovery | Subscription rescue | Contacts |
+| --- | ---: | ---: | ---: |
+| A0 | 0.3585 | 0.3920 | 0 |
+| A1 | 0.4640 | 0.4890 | 3,778 |
+| A2-strengthened | 0.4685 | 0.5190 | 3,626 |
+| **A3-D** | **0.4425** | **0.5085** | **2,871** |
+| A4 (oracle) | 0.5245 | 0.5445 | 3,076 |
 
-The whole comparison — which arms count, which metrics matter, what statistical test decides a win, what "beating the baseline" even means when two baselines are statistically tied — was written down and frozen (`eval-spec-v1.10`) **before** the one holdout run that would judge it. That is the entire point: a number nobody can accuse of being cherry-picked after the fact, because the rule for reading it was fixed first.
+> Here's the frozen holdout result. A3-D used 2,871 contacts — far fewer than A1's 3,778 or A2-strengthened's 3,626. But its invoice recovery, 0.4425, and rescue, 0.5085, both came in below the comparator set, with confidence intervals excluding zero, unfavorably. Criterion 2 — beat the comparators — failed. Criterion 1, safety, passed clean. Criterion 3, contact discipline, passed too. We're not spinning this: on the metric that matters most, A3-D lost.
 
-## 6. Experimental rigor
+### 6. What Caused the Failure — `2:19–3:04`
 
-- **Dev vs. holdout:** all tuning and development happened on a `dev` split (seeds 1000–2999); the `holdout` split (seeds 9000–10999) was never touched until one single, authorized, logged run.
-- **Frozen contract:** `eval-spec-v1.10` — metrics, comparator rule, and success criteria were locked before that holdout run, tagged and committed.
-- **Scale:** 2,000 episodes per arm, 5 arms, **10,000 total holdout episodes**, exact index range 9,000–10,999 verified with zero duplicates, gaps, or extras.
-- **Statistics:** every comparison is a paired bootstrap (10,000 resamples, 95% confidence intervals) on common-random-number-paired episodes — not a raw point-estimate eyeball comparison.
-- **Sealing:** every holdout artifact is checksummed (`SHA256SUMS`) and anchored by an immutable git tag (`holdout-run-4d45db461943-sealed`) *before* anyone looked at the numbers, so the result can't have been touched after the fact.
+`[cue: show docs/analysis/DAY9-DECOMPOSITION.md, the 59/59 finding]`
 
-## 7. The result — reported honestly
+> So we dug in. Against A2-strengthened, all 59 of its extra recoveries trace to one mechanism: A3-D withholding its day-three contact after two unengaged touchpoints — logged as `no_engagement_restraint`. Against A1, the same mechanism explains 41 of 47 losses. It's not STOP — zero of A3-D's 311 holdout STOP actions overlap with a lost recovery. It's not wrong remedies — every contact A3-D actually sent matched the correct remedy, 100 percent. We also directly ruled out cancelled-at-open episodes as contamination. The agent didn't give up — the specific restraint rule, skip the second contact if nobody's engaged yet, was tuned too aggressively for this tradeoff.
 
-**A3-D failed the pre-registered success criteria on holdout.**
+### 7. Economic Interpretation — `3:04–3:33`
 
-| Arm | Invoice recovery rate | Subscription rescue rate | Total contacts |
-|---|---:|---:|---:|
-| A0 (floor) | 0.3585 | 0.3920 | 0 |
-| A1 (naive) | 0.4640 | 0.4890 | 3,778 |
-| A2-strengthened (best non-agent baseline) | 0.4685 | 0.5190 | 3,626 |
-| **A3-D (our agent)** | **0.4425** | **0.5085** | **2,871** |
-| A4 (oracle, reference only) | 0.5245 | 0.5445 | 3,076 |
+`[cue: post-hoc descriptive analysis — not a pre-registered metric]`
 
-On **both** primary metrics, A3-D scored **significantly below** its comparator set, not just short of beating it:
+> Under our registered cost model, A3-D saved 907 contacts versus A1 and 755 versus A2-strengthened, at ₹1.115 per contact. But the break-even cost needed to justify those lost recoveries ranged from ninety-three to two hundred twenty-two rupees per contact — roughly a hundred times higher. The savings don't come close to covering the deficit. No rescue-side ₹ number — no cancellation-value parameter is registered, so we're not inventing one.
 
-- Invoice recovery: A3-D vs. A1, diff = −0.0215, 95% CI [−0.0315, −0.0115]; A3-D vs. A2-strengthened, diff = −0.0260, 95% CI [−0.0340, −0.0185].
-- Subscription rescue: A3-D vs. A2-strengthened, diff = −0.0105, 95% CI [−0.0180, −0.0030].
+### 8. What We Learned / DEV Frontier — `3:33–4:04`
 
-Both confidence intervals exclude zero — in A3-D's unfavorable direction. This is not a near-miss dressed up as a win.
+`[cue: emphasize DEV-ONLY, not a holdout claim]`
 
-## 8. What we learned
+> This failure doesn't mean the architecture is broken. On dev data only, never holdout, we swept the restraint threshold and found a less cautious setting that hit 0.4920 recovery and 0.5445 rescue at 3,710 contacts — beating A1 outright on every axis. That's evidence of parameter sensitivity, not a structural ceiling. We never ran it on holdout, so we make zero claim it's validated. A deliberate line we chose not to cross.
 
-**A3-D achieved genuine contact restraint but did not translate that restraint into superior recovery or rescue performance.** It used fewer total contacts than every comparator arm and had the best contacts-per-outcome ratio of any contacting arm — the discipline mechanism worked exactly as designed (criterion 3 passes cleanly on both metrics). But restraint alone isn't the goal; it has to convert into *more* recoveries and rescues at that lower cost, and on this holdout run it didn't. The gap between A3-D and the oracle (A4) shows real headroom exists — A4 recovers more on both metrics using a comparable budget — which tells us the ceiling isn't the problem; A3-D's specific 16-rule decision table, as currently written, is. That is a concrete, falsifiable, actionable finding — exactly what a pre-registered evaluation is supposed to produce, win or lose.
+### 9. Demo Sequence — `4:04–4:29`
 
-## 8A. Day 9 diagnostic follow-up (post-hoc; dev-only where noted)
+`[cue: open results/audit_sample/a3d_holdout_ledger_sample.jsonl — the committed, checksum-sealed audit excerpt]`
 
-After sealing, we ran a purely descriptive diagnostic pass over the sealed holdout artifacts to find out *why*, without touching the frozen result. Full detail: `docs/analysis/DAY9-*.md`.
+> Episode `holdout-9000`, decline reason card-expired. Day zero: policy proposes a card-change contact, rule R-12, gate accepts, executor sends it, ledger logs it. Days one and two: no engagement, so the withhold rule fires — WAIT, rule R-16. Day three: the customer engaged, A3-D sends its second contact. All four decisions sit in that checksum-sealed file right now.
 
-- **Economic consequence.** Under the registered cost model, A3-D's contact savings recover under ~1.3% of the value its recovery deficit forfeits — the break-even contact cost would need to be roughly 83×–199× the actual registered ₹1.115/contact for the restraint to pay for itself (`docs/analysis/DAY9-NET-VALUE.md`).
-- **The mechanism, isolated.** Episode-level decomposition traced the deficit to a specific cause, not a vague "the agent was too cautious." Against A2-strengthened, **59/59** of the lost-recovery episodes trace to one gate: `R-13`'s day-3 `withhold_applies` predicate declining a second contact after two unengaged observations, in exactly the episodes where the comparator's own contact went on to recover the invoice. Against A1, the same mechanism explains 41 of 47 fewer-contact losses. **STOP was not the cause** — zero of A3-D's 311 holdout STOP actions overlap with a lost-recovery episode. Remedy matching was 100% among contacts A3-D actually sent. **The key lesson: the restraint mechanism itself worked as designed and was never the wrong idea — the specific threshold it was set at, in this configuration, was too aggressive for this tradeoff. That is a narrower and more fixable-sounding finding than "the agent's restraint was miscalibrated" in the abstract, and a very different one than "STOP is the problem."**
-- **Dev-only frontier, explicitly not holdout evidence.** A dev-only sweep of that same threshold found a less-restrictive setting that beat A1 outright (higher recovery, higher rescue, fewer contacts) and improved on A2-strengthened on both primary metrics, on `dev`. **This was never run on holdout, cannot be for this candidate (holdout is single-use), and is not presented as a validated replacement, a new agent, or a fix.** It's evidence that the deficit is at least partly a parameter-positioning problem rather than proof that A3-D's architecture has a ceiling below the comparators — nothing more, and nothing holdout-certified.
+### 10. Closing — `4:29–4:51`
 
-## 9. Demo script
+> Revenue recovery isn't a retry problem — it's a constrained decision problem, where value, cost, timing, safety, and auditability all interact. We preserved the frozen result, diagnosed the failure instead of hiding it. The next step is validating a less aggressive restraint policy — under a fresh, pre-registered evaluation, not this one.
 
-A short, honest, five-minute walkthrough:
+---
 
-1. **Show the frozen contract.** Open `EVAL.md §7` — point at the five pre-registered criteria and the comparator/tie-set rule, written before any holdout number existed. *Say:* "This is the rulebook, and it was locked before we ran the test that judges us against it."
-2. **Show the seal.** Run `git show holdout-run-4d45db461943-sealed --no-patch` and open `results/holdout/4d45db461943/SHA256SUMS`. *Say:* "Every one of these 10,000 episodes' outputs is checksummed and tagged before anyone read a single number."
-3. **Show the analysis code, not a spreadsheet.** Open `src/rrx/eval/holdout_analysis.py`'s `analyze_holdout()` — the same function that produced every number in `RESULTS.md`. *Say:* "This isn't a number we typed in — it's the output of code that recomputes everything from the raw per-episode files and cross-checks it against the committed aggregate."
-4. **Show the result table in `RESULTS.md`.** *Say:* "A3-D lost. Here's the confidence interval that proves it's a real loss, not noise." Point at the negative, zero-excluding CIs.
-5. **Close on the restraint finding.** Point at A3-D's contact totals vs. A2-strengthened's. *Say:* "It learned to hold back — it just didn't yet learn to hold back on the right episodes."
+## Demo artifacts (all pre-existing, none rerun for this pitch)
 
-**Expected audience takeaway:** this team built an evaluation methodology rigorous enough to trust a "no" from, and reported the "no" instead of re-running until it said "yes."
+- **Architecture diagram:** `docs/architecture/revenue-recovery-architecture.svg` (Stage 8A) — for section 2.
+- **Results table + criterion verdicts:** `RESULTS.md §4`, `§3A` — for section 5.
+- **Seal / integrity check** (optional live command, read-only, does not rerun holdout): `sha256sum -c results/holdout/4d45db461943/SHA256SUMS`.
+- **Mechanism finding:** `docs/analysis/DAY9-DECOMPOSITION.md §4–§5`, `results/day9_decomposition/decomposition_a2_strengthened.json` — for section 6.
+- **Break-even figures:** `docs/analysis/DAY9-NET-VALUE.md §5` — for section 7.
+- **Dev-only frontier:** `docs/analysis/DAY9-FRONTIER.md §5` — for section 8.
+- **Ledger walkthrough:** `results/audit_sample/a3d_holdout_ledger_sample.jsonl`, episode `holdout-9000` (first 4 records) — for section 9.
 
-## 10. Closing
+## Source citations (not spoken — for presenter Q&A backup)
 
-The headline result is a loss, and we're not going to pretend otherwise. What we're presenting instead is the harness that made that loss trustworthy: a frozen contract, a single-use holdout, a sealed and checksummed artifact trail, and a statistical test that would have been just as willing to say "yes" if the evidence supported it. A3-D didn't clear the bar this time — but we now know exactly where it fell short, by how much, with what confidence, and why (restraint without better targeting). That is a stronger foundation to iterate from than an unfalsifiable win would have been, and it is not a claim that this system is ready for production — it is a claim that we now have an honest, reproducible way to find out when it is.
+| Claim | Exact source |
+| --- | --- |
+| Holdout table (A0–A4 rates/contacts) | `RESULTS.md §4` |
+| Criterion 1/2/3 verdicts | `RESULTS.md §3A` |
+| A3-D vs. A1/A2-strengthened CIs | `RESULTS.md §7` |
+| GPT-C1–C6, N=500 each, real ledger evidence | `results/tuning_log.md`; `docs/analysis/DAY9-BAR-COMPLIANCE.md §8` |
+| A3-LLM excluded from holdout | `EVAL.md §7.1` item A |
+| 59/59 A2-strengthened deficit episodes; 41/47 A1 | `docs/analysis/DAY9-DECOMPOSITION.md §6` (Stage 2 counts) and Stage 3 §5 (rule attribution); summarized in `RESULTS.md §14.2–§14.3` |
+| 0/311 STOP overlap | `docs/analysis/DAY9-DECOMPOSITION.md §9` |
+| 100% remedy match | `docs/analysis/DAY9-DECOMPOSITION.md`, Stage 3 §3 |
+| Cancelled-at-open ruled out | `docs/analysis/DAY9-DECOMPOSITION.md`, Stage 3 §6 (EVAL §8 item 8 verification) |
+| 907 / 755 contacts saved; ₹1.115 registered cost; ₹92.58–221.75 break-even range | `docs/analysis/DAY9-NET-VALUE.md §3, §5` |
+| Threshold≥3 dev result (0.4920 / 0.5445 / 3,710), dev-only, not holdout-validated | `docs/analysis/DAY9-FRONTIER.md §5, §10` |
+
+## What this script deliberately does not claim
+
+- A3-D did not win criterion 2 on holdout. This script does not say it did.
+- A3-LLM was not run on holdout, and no LLM holdout uplift is claimed.
+- Threshold≥3 is dev-only exploratory evidence, not a validated or shipped policy — no "A3.1" exists.
+- No aggregate ₹ recovered figure is claimed — only the registered-cost-model break-even analysis, labeled post-hoc.
+- No sensitivity-sweep completeness is claimed (`results/sensitivity.md` remains 0/26 — out of scope for this pitch, disclosed in `LIMITATIONS.md`).
