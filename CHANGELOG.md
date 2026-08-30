@@ -1,5 +1,48 @@
 # Changelog
 
+## Day 9 Stage 1 — net-value / break-even analysis, pre-declaration — 2026-08-30
+
+**Status: a pre-declaration for a post-hoc descriptive analysis, NOT an
+`eval-spec` amendment.** No spec version is opened or bumped by this entry.
+`EVAL.md`, `configs/costs.yaml`, `configs/population.yaml`, and every other
+locked evaluation-surface file remain byte-unchanged. This entry exists
+solely to commit, before any calculation is performed, to the terms under
+which Day 9 Stage 1 (net-value / break-even analysis of the sealed Day 8
+holdout result) will be conducted and reported.
+
+**What Stage 1 is:** an arithmetic re-expression of the already-sealed,
+already-published `holdout` result (`RESULTS.md`, `results/holdout/4d45db461943/`)
+in monetary terms, using the already-registered cost model
+(`configs/costs.yaml`) unchanged. It computes no new statistical test, runs
+no new simulation, and does not touch the `holdout` index space in any way
+`EVAL.md §3.5` would recognize as "accessing" it — the split was already
+fully consumed and sealed under `holdout-run-4d45db461943-sealed` before
+this entry.
+
+**Binding commitments, stated before any figure is calculated:**
+
+1. **The registered cost assumptions in `configs/costs.yaml` will be used
+   unchanged.** No cost, fee, or price figure in that file is edited,
+   overridden, or silently substituted for this analysis.
+2. **The break-even contact cost will be reported regardless of whether it
+   favors A3-D or its comparator arms.** No result is discarded, reframed,
+   or suppressed based on its sign or magnitude.
+3. **No holdout tuning, retuning, or re-selection of A3-D (or any other
+   arm) follows from this calculation, under any outcome.** This is
+   read-only economic accounting on top of a result that is already final
+   per `EVAL.md §3.5`'s single-use holdout rule.
+4. **This is a post-hoc descriptive economic re-expression of an existing,
+   already-scored result — not a new success criterion, not a
+   retroactive amendment to `EVAL.md §7`'s pre-registered criteria, and
+   not a substitute for criterion 2's already-recorded FAIL verdict**
+   (`RESULTS.md` §3A). Nothing in this analysis can change, has any power
+   to change, or is intended to change that verdict.
+
+**Verification required before commit:** `git diff --stat` for this commit
+touches only `CHANGELOG.md`. No file under `src/`, `configs/`, `tests/`,
+`data/`, `results/`, or `EVAL.md` itself is modified. No holdout artifact
+changes. No new `authorized=True` call site. No tag created or moved.
+
 ## eval-spec-v1.10 — fallback-reason taxonomy corrected for executor enforcement — 2026-08-29
 
 Correction-only stage. No simulator, agent, config, test, or result
