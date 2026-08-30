@@ -1,0 +1,23 @@
+{
+  "threshold2": {
+    "invoice_recovery_rate": 0.467,
+    "subscription_rescue_rate": 0.5305,
+    "total_contacts": 2825
+  },
+  "threshold3": {
+    "invoice_recovery_rate": 0.492,
+    "subscription_rescue_rate": 0.5445,
+    "total_contacts": 3710
+  },
+  "paired_bootstrap_invoice_recovery_diff_3_minus_2": {
+    "point": 0.025,
+    "ci_lo": 0.0185,
+    "ci_hi": 0.032
+  },
+  "paired_bootstrap_subscription_rescue_diff_3_minus_2": {
+    "point": 0.014,
+    "ci_lo": 0.0065,
+    "ci_hi": 0.0215
+  },
+  "method": "rrx.sim.run_stage3.paired_bootstrap_ci, unmodified, dev split, seeds 1000-2999, N=2000, default N_BOOTSTRAP_RESAMPLES/BOOTSTRAP_SEED"
+}
