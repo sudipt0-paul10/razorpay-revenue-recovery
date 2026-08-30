@@ -1,5 +1,94 @@
 # Changelog
 
+## Day 9 Stage 4 — R-16 adjudication + dev-only frontier, pre-declaration — 2026-08-30
+
+**Status: a pre-declaration for a diagnostic adjudication (Part A) plus a
+dev-only descriptive experiment (Part B), NOT an `eval-spec` amendment and
+NOT a policy change.** No spec version opened or bumped; `EVAL.md`,
+`configs/costs.yaml`, and every file under `src/rrx/agent/`/`src/rrx/sim/`
+remain byte-unchanged. Written and committed **before**
+`scripts/day9_frontier.py` is executed, so the threshold grid below cannot
+have been shaped by any frontier result. Part A requires no new script —
+it re-inspects sealed Stage 3 output and the frozen design text — so this
+entry pre-declares Part B's methodology, which is the only new execution
+in this stage.
+
+### Part A method (no execution, re-inspection only)
+
+R-16 firings are classified into the three categories Stage 3 already
+identified (engagement-triggered off-schedule days; late fixed days after
+rules are exhausted; decline-code/day combinations with no dedicated
+rule), cross-referenced against `docs/A3-DESIGN.md §10A.4`/`§10A.5` and
+`EVAL.md §3.4`/`§5`, using the label set the stage instructions specify:
+`EXPECTED FALLTHROUGH` (an explicit design citation supports the observed
+default), `DESIGN-AMBIGUOUS` (plausible but not explicitly confirmed),
+`DESIGN GAP` (violates a stated invariant — reserved for cases with
+textual proof, not invoked speculatively). The rule table itself is not
+modified by this classification exercise.
+
+### Part B method — the swept parameter, identified before any run
+
+The restraint threshold is the literal `2` in `src/rrx/agent/policy.py`
+line 43: `withhold_applies = observations >= 2 and not any_engaged`
+(`docs/A3-DESIGN.md §10A.3`). It is an inline literal, not a named
+module-level constant or config value — there is no config key to sweep
+without either editing `src/rrx/agent/policy.py` (forbidden by this
+stage's contamination rules) or writing an entirely separate,
+parameterized copy of the same 16-rule decision table outside
+`src/rrx/agent/`. This entry commits to the latter: a new function,
+`make_a3d_policy_variant(withhold_threshold)`, in
+`scripts/day9_frontier.py` — mechanically identical to `a3d_policy`
+except the one literal replaced by a parameter — validated (before any
+threshold other than 2 is trusted) by reproducing
+`results/a3d-dev-20260828-01/metrics.json` exactly at `withhold_threshold=2`.
+If that parity check fails, the script stops and reports the mismatch
+rather than proceeding to the sweep. This mirrors the existing
+`rrx.baselines.a2_variants` precedent (`CHANGELOG.md`'s `eval-spec-v1.3`
+entry, "Implementation location") of registering policy variants outside
+the frozen module rather than editing it.
+
+**Grid, chosen from the parameterization's own structure, not by
+inspecting any result:** `{1, 2, 3, 4, 5, 6, 7}` — 7 points, the current
+setting (`2`) at the center. Rationale: `withhold_applies` is evaluated
+only at the three decision points gated by it (`R-09` day 2 for
+`insufficient_funds`; `R-13` day 3 for `CARD_BROKEN`; `R-15` day 2 for
+`ambiguous_decline`), and at every one of those points the preceding
+rule for that same decline code unconditionally contacts at day 0
+(`R-08`/`R-12`/`R-14`, none of which check `withhold_applies`) — so
+`observations` (`len(view.contact_history)`) is deterministically `2`
+(the day-0 auto-email plus the day-0 contact) whenever the predicate is
+evaluated, absent engagement. Thresholds `1`–`2` are therefore expected
+to be behaviorally identical to the frozen default, and thresholds
+`>= 3` are expected to be identical to each other (the predicate can
+never see `observations >= 3` at any point it is actually checked,
+given the fixed schedule) — a hypothesis stated here, before execution,
+for the sweep itself to confirm or refute empirically, not assumed as
+the reported finding.
+
+**Population/seed:** `dev` split only
+(`rrx.harness.splits.dev_indices()`, seeds 1000–2999, `N=2000`),
+`MASTER_SEED=20260825` — identical to every existing dev run. **No
+`holdout_indices()` call anywhere in `scripts/day9_frontier.py`.**
+
+**Comparator overlay:** the already-published, already-committed dev
+metrics for A1 (`results/a1-dev-20260828-01/metrics.json`),
+A2-strengthened (`results/a2s-dev-20260828-01/metrics.json`), and the
+original A3-D (`results/a3d-dev-20260828-01/metrics.json`) — not rerun.
+
+**Binding commitments:**
+
+1. No policy-selection decision is made from this sweep. No `A3.1` is
+   created. `src/rrx/agent/policy.py` is not edited at any point.
+2. Every tested grid point is reported, including any that tie or lose
+   to the frozen default.
+3. No holdout access of any kind. `git grep -n "holdout_indices"` over
+   `scripts/day9_frontier.py` must return nothing after it is written.
+4. `scripts/day9_frontier.py` writes only to `results/day9_frontier/`.
+
+**Verification required before running the script:** `git diff --stat`
+for this commit touches only `CHANGELOG.md` and (in the same commit)
+`scripts/day9_frontier.py`.
+
 ## Day 9 Stage 3 — mechanism attribution, pre-declaration — 2026-08-30
 
 **Status: a pre-declaration for a diagnostic attribution analysis, NOT an
