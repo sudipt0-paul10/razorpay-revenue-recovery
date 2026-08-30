@@ -1,0 +1,47 @@
+flowchart TD
+    subgraph Z1["1 . Input / Simulator"]
+        A["Payment failure event"] --> B["Simulator draws episode<br/>population.yaml + episode.yaml<br/>decline_code, invoice_amount"]
+    end
+
+    subgraph Z2["2 . Episode State"]
+        B --> C["EpisodeView<br/>observable fields only<br/>no hidden/latent state exposed"]
+    end
+
+    subgraph Z3["3 . Policy / Planner"]
+        C --> E["A3-D<br/>deterministic 16-rule table<br/>decline routing, retry-window timing,<br/>remedy matching, withhold_applies restraint,<br/>STOP / WAIT / CONTACT"]
+        C --> F["A3-LLM<br/>gpt-5-mini prompted planner<br/>DEV / TUNING ONLY<br/>not holdout validated"]
+        F -->|"fallback on timeout, parse error,<br/>schema violation, gate reject"| E
+    end
+
+    subgraph Z4["4 . Safety Gate"]
+        E --> G{"Gate: rules R1-R8<br/>remedy match, budget cap,<br/>quiet hours, risk stop"}
+        F --> G
+    end
+
+    subgraph Z5["5 . Executor and Ledger"]
+        G -->|reject| REJ["Enforcement fallback / no action"]
+        G -->|accept| H{"Executed action"}
+        H -->|CONTACT| I["Send message"]
+        H -->|WAIT| J["No action this tick"]
+        H -->|STOP| K["End future contact,<br/>forfeit remaining budget"]
+        I --> L["Ledger record:<br/>rule id, reason_code,<br/>gate verdict, action"]
+        J --> L
+        K --> L
+        REJ --> L
+    end
+    L -->|next tick| C
+
+    subgraph Z6["6 . Evaluation Harness"]
+        M["DEV<br/>tuning, GPT-C1 to C6,<br/>Day 9 diagnostics,<br/>dev-only threshold frontier"]
+        N["FROZEN HOLDOUT<br/>single sealed run, A3-D only,<br/>criteria 1-5 evaluation,<br/>no post-hoc tuning, no A3.1"]
+    end
+    E --> M
+    E --> N
+    F --> M
+
+    classDef holdout fill:#e6f4ea,stroke:#2e7d32,stroke-width:2px;
+    classDef devonly fill:#fdecea,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 3;
+    classDef gate fill:#fff8e1,stroke:#f9a825,stroke-width:2px;
+    class E,N holdout
+    class F,M devonly
+    class G gate

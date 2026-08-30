@@ -35,6 +35,10 @@ payment failure
 
 `EpisodeView` (`src/rrx/features/episode_view.py`) is the agent's entire information boundary — ten fields (subscription state, invoice amount, days since first failure, auto-retry status, decline code, contact history, budget remaining). The agent never sees the simulator's hidden latent state; `tests/test_no_latent_leak.py` enforces this at both the import level and the rendered-prompt level.
 
+![Architecture diagram](docs/architecture/revenue-recovery-architecture.svg)
+
+Green = A3-D, the deterministic policy actually scored on the frozen holdout run. Red/dashed = A3-LLM and its dev-only evaluation surface — no edge to the "FROZEN HOLDOUT" box anywhere in this diagram, on purpose. Full legend and Mermaid source: [`docs/architecture/revenue-recovery-architecture.md`](docs/architecture/revenue-recovery-architecture.md).
+
 ## AI / LLM Component
 
 Stated precisely, because this distinction matters for the submission:
