@@ -1,5 +1,80 @@
 # Changelog
 
+## Day 9 Stage 3 — mechanism attribution, pre-declaration — 2026-08-30
+
+**Status: a pre-declaration for a diagnostic attribution analysis, NOT an
+`eval-spec` amendment.** No spec version opened or bumped; `EVAL.md` and
+every other locked file remain byte-unchanged. Written and committed
+**before** `scripts/day9_mechanism_attribution.py` is executed, so the
+rule-to-mechanism mapping below cannot have been shaped by any attribution
+result.
+
+**Objective:** attribute A3-D's holdout ledger behavior — and specifically
+the Stage 2 Bucket A deficit population — to `EVAL.md §3.4`'s three
+pre-registered advantage sources (retry-window timing, remedy matching,
+within-episode adaptive contact), using structured ledger fields only.
+
+**Pre-declared attribution method, fixed before any count is computed:**
+
+Every A3-D wakeup ledger record carries `rationale`, the exact decision-
+table rule id (`R-01`…`R-16`) that fired, per
+`docs/A3-DESIGN.md §10A.4` ("first-match-wins... every rule emits its own
+id as `Proposal.rationale`"). Each rule's mechanism association is read
+directly from `docs/A3-DESIGN.md §10A.5`'s per-rule "basis" text — a
+document frozen (tagged `eval-spec-v1.5`) before any A3-D episode was ever
+executed, not written or adjusted for this analysis. The mapping:
+
+| Rule | Tag(s) | Basis (verbatim summary of §10A.5) |
+|---|---|---|
+| R-01 | none | defensive, structurally unreachable |
+| R-02 | none | FORCED by gate R4 |
+| R-03 | RWT | FORCED mechanically — no retry window ever exists |
+| R-04 | RWT | FORCED — retry window still open |
+| R-05 | RWT | retries exhausted, window closed |
+| R-06 | RWT | halted, window closed |
+| R-07 | RWT | day≥3, window mechanically dead |
+| R-08 | RWT, RM | topup remedy, earliest in-window day |
+| R-09 | RWT, RM, AC | topup remedy, last in-window day, withhold-gated |
+| R-10 | RWT, AC | WAIT; `reason_code` itself distinguishes the two |
+| R-11 | RM | post-halt remedy, explicitly exempt from the withhold test (§10A.5 `[D-7]`) |
+| R-12 | RM | day-0 remedy match, fixed schedule, not withhold-gated |
+| R-13 | RM, AC | day-3 remedy match, withhold-gated — the Stage 2 divergence rule |
+| R-14 | RM | day-0 fail-safe remedy, not withhold-gated |
+| R-15 | RM, AC | day-2 hedge remedy, withhold-gated |
+| R-16 | none | named default/fallthrough, diagnostic only |
+
+(RWT = retry-window timing, RM = remedy matching, AC = within-episode
+adaptive contact.) A rule may carry more than one tag — several rules
+fuse two or three mechanisms in a single ordered condition (e.g. R-09,
+R-13, R-15), which is itself a finding to report (**NOT SEPARABLE**), not
+a defect in the mapping.
+
+**Binding commitments:**
+
+1. This mapping will not be edited after computing rule-firing counts. If
+   a rule's mechanism association turns out ambiguous, that is reported as
+   `NOT SEPARABLE` or `NOT IDENTIFIABLE`, not resolved by picking whichever
+   tag makes the result look better.
+2. Stage 2's Bucket A membership (episode-index sets) is **re-derived**
+   using the identical, already-committed rule (fewer contacts AND
+   comparator recovered AND A3-D did not) purely to obtain the full index
+   list for further stratification — the counts must reproduce Stage 2's
+   already-published 47 (vs. A1) and 59 (vs. A2-strengthened) exactly, or
+   this analysis stops and reports the discrepancy rather than proceeding.
+3. Retry-window boundary constants (`card_schedule_days: [1,2,3]`,
+   `halt_boundary_day: 3`, `configs/episode.yaml:40,61`) are read verbatim
+   from the locked config — not re-derived, not adjusted.
+4. `EVAL.md §8` item 8 (cancelled-at-open contamination) is verified
+   against actual sealed holdout artifacts (episode/ledger counts for
+   `opening_condition_key == "subscription_cancelled_by_customer"`), not
+   by re-quoting `docs/A3-DESIGN.md §20`'s existing claim.
+5. `scripts/day9_mechanism_attribution.py` is read-only against
+   `results/holdout/` and writes only to `results/day9_decomposition/`.
+
+**Verification required before running the script:** `git diff --stat`
+for this commit touches only `CHANGELOG.md` and (in the same commit)
+`scripts/day9_mechanism_attribution.py`.
+
 ## Day 9 Stage 2 — paired recovery-deficit decomposition, pre-declaration — 2026-08-30
 
 **Status: a pre-declaration for a diagnostic decomposition, NOT an
