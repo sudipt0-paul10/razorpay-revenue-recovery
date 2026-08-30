@@ -200,8 +200,11 @@ is **not** a completed evaluation result:
   DEV confirmation run that `docs/A3-DESIGN.md §18` prescribes for the
   selected configuration has **not** been executed.
 - GPT-C2 must not be described as full-DEV validated.
-- Holdout has not been accessed for selection or for anything else (see
-  §3.2).
+- At the time of this selection (Day 6, commit `26ba176`), holdout had
+  not been accessed for this or any other purpose. Holdout was later
+  executed as a separate, single authorized run after selection was
+  frozen — see §3.2 for that run's outcome. That later run has no
+  bearing on this selection, which remains DEV-only evidence.
 - The selection itself sits on top of an unresolved methodology
   question about whether the GPT-C1–C6 matrix it was drawn from is
   authorized tuning evidence at all — see §4.1. This document does not
@@ -444,10 +447,18 @@ implementation can support:
   statement about `sim-v1`, a synthetic, frozen simulator — not a
   statement about real Razorpay merchants, customers, or transactions
   (§1).
-- **A completed holdout verdict.** No holdout run has occurred (§3.2);
-  `EVAL.md §7`'s success criteria are adjudicated on holdout only, and
-  none of the descriptive DEV-split comparisons produced so far
-  constitute or substitute for that determination.
+- **Any holdout verdict beyond the single sealed Day 8 run.** The Day 8
+  holdout has been executed, independently verified, and
+  cryptographically sealed (`holdout-run-4d45db461943-sealed`; see
+  §3.2). `RESULTS.md` documents the actual verdict: A3-D failed the
+  pre-registered Criterion 2 on both primary metrics against its
+  holdout comparator set, while passing Criterion 3 (contact
+  discipline). Because holdout is single-use per candidate release
+  (`EVAL.md §3.5`), this sealed run is the only holdout verdict this
+  candidate will ever have — none of the descriptive DEV-split
+  comparisons produced elsewhere in this document constitute or
+  substitute for it, and no further holdout run can be produced to
+  revisit or improve on this result.
 - **A validated final A3-LLM configuration.** The current selection
   (GPT-C2) is provisional, based on N=500 DEV evidence, pending both a
   full N=2,000 DEV confirmation run and the unresolved tuning-budget
