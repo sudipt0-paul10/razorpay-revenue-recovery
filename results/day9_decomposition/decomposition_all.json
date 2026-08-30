@@ -1,0 +1,584 @@
+{
+  "a1": {
+    "comparator": "a1",
+    "n_total": 2000,
+    "confusion_matrix": {
+      "both_recovered": 855,
+      "neither_recovered": 1042,
+      "comparator_only_recovered": 73,
+      "a3d_only_recovered": 30
+    },
+    "rate_diff_from_pairs_comparator_minus_a3d": 0.0215,
+    "buckets": {
+      "A_fewer_contacts_lost": {
+        "count": 47,
+        "pct_of_paired": 0.0235,
+        "contribution_to_rate_diff": 0.0235,
+        "D1_stop_attributable": {
+          "count": 0,
+          "pct_of_paired": 0.0,
+          "examples": []
+        },
+        "D2_other_fewer_contact_loss": {
+          "count": 47,
+          "pct_of_paired": 0.0235,
+          "examples": [
+            {
+              "episode_index": 9017,
+              "opening_condition_key": "card_not_enabled_group",
+              "invoice_amount_inr": 6653,
+              "a3d_contacts_sent": 1,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 3,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            },
+            {
+              "episode_index": 9026,
+              "opening_condition_key": "card_expired",
+              "invoice_amount_inr": 1348,
+              "a3d_contacts_sent": 1,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 3,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            },
+            {
+              "episode_index": 9169,
+              "opening_condition_key": "debit_instrument_blocked",
+              "invoice_amount_inr": 3447,
+              "a3d_contacts_sent": 1,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 3,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            }
+          ]
+        },
+        "decline_code_strat": {
+          "card_not_enabled_group": 3,
+          "card_expired": 21,
+          "debit_instrument_blocked": 17,
+          "ambiguous_decline": 6
+        },
+        "day_strat_last_a3d_wakeup_tick": {
+          "3": 47
+        }
+      },
+      "B_fewer_contacts_recovery_preserved_context_only": {
+        "count": 724,
+        "pct_of_paired": 0.362,
+        "contribution_to_rate_diff": 0.0
+      },
+      "C_same_contacts_timing": {
+        "status": "NOT IDENTIFIABLE from available artifacts",
+        "reason": "Neither a1 nor a2_strengthened produces a ledger or any per-day contact record; only a total contacts_sent per episode exists for those arms. Episodes with equal contact counts but differing outcomes are routed to Bucket E and reported there as 'same_contacts' for transparency.",
+        "would_be_count_if_not_excluded": 21
+      },
+      "E_other_unexplained": {
+        "same_contacts_subtotal": {
+          "count": 21,
+          "pct_of_paired": 0.0105,
+          "decline_code_strat": {
+            "card_not_enabled_group": 2,
+            "debit_instrument_blocked": 10,
+            "card_expired": 6,
+            "ambiguous_decline": 3
+          },
+          "examples": [
+            {
+              "episode_index": 9159,
+              "opening_condition_key": "card_not_enabled_group",
+              "invoice_amount_inr": 472,
+              "a3d_contacts_sent": 2,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 5,
+              "a3d_last_wakeup_reason_code": "post_halt_rescue",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "post_halt_rescue"
+              ]
+            },
+            {
+              "episode_index": 9188,
+              "opening_condition_key": "debit_instrument_blocked",
+              "invoice_amount_inr": 2358,
+              "a3d_contacts_sent": 2,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 14,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "post_halt_rescue",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            },
+            {
+              "episode_index": 9323,
+              "opening_condition_key": "card_expired",
+              "invoice_amount_inr": 1103,
+              "a3d_contacts_sent": 2,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 14,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "post_halt_rescue",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            }
+          ]
+        },
+        "more_contacts_subtotal": {
+          "count": 5,
+          "pct_of_paired": 0.0025,
+          "decline_code_strat": {
+            "ambiguous_decline": 5
+          },
+          "examples": [
+            {
+              "episode_index": 9203,
+              "opening_condition_key": "ambiguous_decline",
+              "invoice_amount_inr": 1670,
+              "a3d_contacts_sent": 3,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 5,
+              "a3d_last_wakeup_reason_code": "post_halt_rescue",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "remedy_match_topup",
+                "no_engagement_restraint",
+                "post_halt_rescue"
+              ]
+            },
+            {
+              "episode_index": 9287,
+              "opening_condition_key": "ambiguous_decline",
+              "invoice_amount_inr": 5424,
+              "a3d_contacts_sent": 3,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 5,
+              "a3d_last_wakeup_reason_code": "post_halt_rescue",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "remedy_match_topup",
+                "no_engagement_restraint",
+                "post_halt_rescue"
+              ]
+            },
+            {
+              "episode_index": 9699,
+              "opening_condition_key": "ambiguous_decline",
+              "invoice_amount_inr": 1577,
+              "a3d_contacts_sent": 3,
+              "comp_contacts_sent": 2,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 5,
+              "a3d_last_wakeup_reason_code": "post_halt_rescue",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "remedy_match_topup",
+                "no_engagement_restraint",
+                "post_halt_rescue"
+              ]
+            }
+          ]
+        },
+        "total_count": 26,
+        "total_pct_of_paired": 0.013,
+        "total_contribution_to_rate_diff": 0.013
+      }
+    },
+    "reconciliation": {
+      "comp_only_count": 73,
+      "sum_A_plus_E": 73,
+      "matches": true,
+      "a3d_only_count": 30,
+      "signed_check_rate_diff": 0.0215,
+      "matches_pairwise_rate_diff": true
+    },
+    "stop_divergence_subgroup": {
+      "count": 0,
+      "pct_of_comp_only": 0.0,
+      "decline_code_strat": {},
+      "day_strat_first_stop_tick": {},
+      "reason_code_at_stop": {}
+    },
+    "reason_code_mechanism_all_comp_only": {
+      "no_engagement_restraint": 65,
+      "post_halt_rescue": 8
+    },
+    "tick_type_mechanism_all_comp_only": {
+      "wakeup": 352,
+      "terminal_suppressed": 1371,
+      "no_wakeup": 415,
+      "budget_exhausted": 125
+    },
+    "bucket_B_examples": [
+      {
+        "episode_index": 9001,
+        "opening_condition_key": "insufficient_funds",
+        "invoice_amount_inr": 2475,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 1,
+        "a3d_last_wakeup_reason_code": "retry_window_open",
+        "a3d_reason_code_trail": [
+          "remedy_match_topup",
+          "retry_window_open"
+        ]
+      },
+      {
+        "episode_index": 9004,
+        "opening_condition_key": "insufficient_funds",
+        "invoice_amount_inr": 2858,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 2,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_topup",
+          "no_engagement_restraint",
+          "no_engagement_restraint"
+        ]
+      },
+      {
+        "episode_index": 9007,
+        "opening_condition_key": "insufficient_funds",
+        "invoice_amount_inr": 787,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": true,
+        "a3d_last_wakeup_tick": 3,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_topup",
+          "no_engagement_restraint",
+          "no_engagement_restraint",
+          "no_engagement_restraint"
+        ]
+      }
+    ],
+    "a3d_only_examples": [
+      {
+        "episode_index": 9036,
+        "opening_condition_key": "ambiguous_decline",
+        "invoice_amount_inr": 110,
+        "a3d_contacts_sent": 2,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 3,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_card",
+          "no_engagement_restraint",
+          "remedy_match_topup",
+          "no_engagement_restraint"
+        ]
+      },
+      {
+        "episode_index": 9091,
+        "opening_condition_key": "insufficient_funds",
+        "invoice_amount_inr": 5193,
+        "a3d_contacts_sent": 2,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 2,
+        "a3d_last_wakeup_reason_code": "engagement_observed",
+        "a3d_reason_code_trail": [
+          "remedy_match_topup",
+          "retry_window_open",
+          "engagement_observed"
+        ]
+      },
+      {
+        "episode_index": 9208,
+        "opening_condition_key": "insufficient_funds",
+        "invoice_amount_inr": 1977,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 1,
+        "a3d_last_wakeup_reason_code": "retry_window_open",
+        "a3d_reason_code_trail": [
+          "remedy_match_topup",
+          "retry_window_open"
+        ]
+      }
+    ]
+  },
+  "a2_strengthened": {
+    "comparator": "a2_strengthened",
+    "n_total": 2000,
+    "confusion_matrix": {
+      "both_recovered": 878,
+      "neither_recovered": 1056,
+      "comparator_only_recovered": 59,
+      "a3d_only_recovered": 7
+    },
+    "rate_diff_from_pairs_comparator_minus_a3d": 0.026,
+    "buckets": {
+      "A_fewer_contacts_lost": {
+        "count": 59,
+        "pct_of_paired": 0.0295,
+        "contribution_to_rate_diff": 0.0295,
+        "D1_stop_attributable": {
+          "count": 0,
+          "pct_of_paired": 0.0,
+          "examples": []
+        },
+        "D2_other_fewer_contact_loss": {
+          "count": 59,
+          "pct_of_paired": 0.0295,
+          "examples": [
+            {
+              "episode_index": 9017,
+              "opening_condition_key": "card_not_enabled_group",
+              "invoice_amount_inr": 6653,
+              "a3d_contacts_sent": 1,
+              "comp_contacts_sent": 3,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 3,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            },
+            {
+              "episode_index": 9026,
+              "opening_condition_key": "card_expired",
+              "invoice_amount_inr": 1348,
+              "a3d_contacts_sent": 1,
+              "comp_contacts_sent": 3,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 3,
+              "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint"
+              ]
+            },
+            {
+              "episode_index": 9159,
+              "opening_condition_key": "card_not_enabled_group",
+              "invoice_amount_inr": 472,
+              "a3d_contacts_sent": 2,
+              "comp_contacts_sent": 3,
+              "a3d_stop_flag": false,
+              "a3d_last_wakeup_tick": 5,
+              "a3d_last_wakeup_reason_code": "post_halt_rescue",
+              "a3d_reason_code_trail": [
+                "remedy_match_card",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "no_engagement_restraint",
+                "post_halt_rescue"
+              ]
+            }
+          ]
+        },
+        "decline_code_strat": {
+          "card_not_enabled_group": 5,
+          "card_expired": 27,
+          "debit_instrument_blocked": 27
+        },
+        "day_strat_last_a3d_wakeup_tick": {
+          "3": 41,
+          "5": 3,
+          "14": 15
+        }
+      },
+      "B_fewer_contacts_recovery_preserved_context_only": {
+        "count": 317,
+        "pct_of_paired": 0.1585,
+        "contribution_to_rate_diff": 0.0
+      },
+      "C_same_contacts_timing": {
+        "status": "NOT IDENTIFIABLE from available artifacts",
+        "reason": "Neither a1 nor a2_strengthened produces a ledger or any per-day contact record; only a total contacts_sent per episode exists for those arms. Episodes with equal contact counts but differing outcomes are routed to Bucket E and reported there as 'same_contacts' for transparency.",
+        "would_be_count_if_not_excluded": 0
+      },
+      "E_other_unexplained": {
+        "same_contacts_subtotal": {
+          "count": 0,
+          "pct_of_paired": 0.0,
+          "decline_code_strat": {},
+          "examples": []
+        },
+        "more_contacts_subtotal": {
+          "count": 0,
+          "pct_of_paired": 0.0,
+          "decline_code_strat": {},
+          "examples": []
+        },
+        "total_count": 0,
+        "total_pct_of_paired": 0.0,
+        "total_contribution_to_rate_diff": 0.0
+      }
+    },
+    "reconciliation": {
+      "comp_only_count": 59,
+      "sum_A_plus_E": 59,
+      "matches": true,
+      "a3d_only_count": 7,
+      "signed_check_rate_diff": 0.026,
+      "matches_pairwise_rate_diff": true
+    },
+    "stop_divergence_subgroup": {
+      "count": 0,
+      "pct_of_comp_only": 0.0,
+      "decline_code_strat": {},
+      "day_strat_first_stop_tick": {},
+      "reason_code_at_stop": {}
+    },
+    "reason_code_mechanism_all_comp_only": {
+      "no_engagement_restraint": 56,
+      "post_halt_rescue": 3
+    },
+    "tick_type_mechanism_all_comp_only": {
+      "wakeup": 285,
+      "terminal_suppressed": 1182,
+      "no_wakeup": 362
+    },
+    "bucket_B_examples": [
+      {
+        "episode_index": 9010,
+        "opening_condition_key": "debit_instrument_blocked",
+        "invoice_amount_inr": 28430,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 3,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 1,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_card",
+          "no_engagement_restraint"
+        ]
+      },
+      {
+        "episode_index": 9022,
+        "opening_condition_key": "ambiguous_decline",
+        "invoice_amount_inr": 817,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 3,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_card",
+          "no_engagement_restraint",
+          "no_engagement_restraint",
+          "no_engagement_restraint"
+        ]
+      },
+      {
+        "episode_index": 9030,
+        "opening_condition_key": "ambiguous_decline",
+        "invoice_amount_inr": 302,
+        "a3d_contacts_sent": 1,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 1,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_card",
+          "no_engagement_restraint"
+        ]
+      }
+    ],
+    "a3d_only_examples": [
+      {
+        "episode_index": 9036,
+        "opening_condition_key": "ambiguous_decline",
+        "invoice_amount_inr": 110,
+        "a3d_contacts_sent": 2,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 3,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_card",
+          "no_engagement_restraint",
+          "remedy_match_topup",
+          "no_engagement_restraint"
+        ]
+      },
+      {
+        "episode_index": 9353,
+        "opening_condition_key": "insufficient_funds",
+        "invoice_amount_inr": 6614,
+        "a3d_contacts_sent": 2,
+        "comp_contacts_sent": 1,
+        "a3d_stop_flag": true,
+        "a3d_last_wakeup_tick": 3,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_topup",
+          "retry_window_open",
+          "engagement_observed",
+          "no_engagement_restraint"
+        ]
+      },
+      {
+        "episode_index": 9869,
+        "opening_condition_key": "ambiguous_decline",
+        "invoice_amount_inr": 2172,
+        "a3d_contacts_sent": 2,
+        "comp_contacts_sent": 2,
+        "a3d_stop_flag": false,
+        "a3d_last_wakeup_tick": 3,
+        "a3d_last_wakeup_reason_code": "no_engagement_restraint",
+        "a3d_reason_code_trail": [
+          "remedy_match_card",
+          "no_engagement_restraint",
+          "remedy_match_topup",
+          "no_engagement_restraint"
+        ]
+      }
+    ]
+  }
+}
