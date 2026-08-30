@@ -223,21 +223,31 @@ procedurally: it raises `HoldoutNotAuthorizedError` unless called with
 `authorized=True`, which no code path in this repository currently
 does.
 
-**Current status:** holdout has **not yet been run**. `results/holdout_runs.md`
-does not exist in the repository. No holdout data has been inspected,
-loaded, or referenced by any tuning or selection artifact found in this
-repository. `tests/test_holdout_guard_intact.py` exercises only the
-refusal path (`holdout_indices()` without authorization raises) and
-never calls `authorized=True`.
+**Current status:** the holdout has now been **executed, verified, and
+cryptographically sealed**. One single authorized run, logged in full
+in `results/holdout_runs.md`, executed all five required arms (A0, A1,
+A2-strengthened, A3-D, A4) over the complete N=2,000-episode-per-arm
+holdout split (seeds 9,000–10,999), via the single `authorized=True`
+call site in `scripts/run_holdout.py`. The run is sealed under tag
+`holdout-run-4d45db461943-sealed`; every artifact is checksummed in
+`results/holdout/4d45db461943/SHA256SUMS`. `RESULTS.md` documents the
+full outcome: A3-D **failed** the pre-registered criterion 2 on both
+primary metrics against its holdout comparator set, while passing
+criterion 3 (contact discipline). `tests/test_holdout_guard_intact.py`
+still exercises only the refusal path for unauthorized calls — that
+guard remains intact and continues to reject any *further* unauthorized
+access.
 
-Do not read the method description above as implying a holdout result
-exists — it does not. The method and the current execution status are
-two different facts, both stated here so they are not conflated.
+Per `EVAL.md §3.5`, holdout is single-use per candidate release: this
+split has now been consumed for the current candidate and must not be
+re-accessed to re-evaluate, tune, or re-run it.
 
 **Evidence:** `EVAL.md §3.5`; `src/rrx/harness/splits.py:50-62`
-(`holdout_indices`, `HoldoutNotAuthorizedError`); `tests/test_holdout_guard_intact.py`
-(refusal-path-only coverage); absence of `results/holdout_runs.md`
-(confirmed by direct filesystem check).
+(`holdout_indices`, `HoldoutNotAuthorizedError`); `results/holdout_runs.md`
+(full authorization, execution, and seal record); tag
+`holdout-run-4d45db461943-sealed`;
+`results/holdout/4d45db461943/SHA256SUMS`; `RESULTS.md` (full holdout
+outcome).
 
 ### 3.3 Sensitivity analysis
 
