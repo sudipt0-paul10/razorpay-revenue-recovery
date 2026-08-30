@@ -1,5 +1,89 @@
 # Changelog
 
+## Day 9 Stage 2 — paired recovery-deficit decomposition, pre-declaration — 2026-08-30
+
+**Status: a pre-declaration for a diagnostic decomposition, NOT an
+`eval-spec` amendment.** No spec version is opened or bumped. `EVAL.md`,
+`configs/costs.yaml`, and every other locked file remain byte-unchanged.
+Written and committed **before** `scripts/day9_decompose.py` is executed
+against the sealed holdout artifacts, so the classification logic below
+cannot have been shaped by any decomposition result.
+
+**Objective:** explain, at the episode level, where A3-D's already-scored
+holdout invoice-recovery deficit (`RESULTS.md` §7) comes from, relative to
+each `EVAL.md §7` invoice-recovery comparator (A1, A2-strengthened). This
+is diagnostic, not confirmatory — it cannot change, and is not intended to
+change, `RESULTS.md`'s already-recorded criterion 2 FAIL verdict.
+
+**Pre-declared, mutually exclusive, exhaustive decomposition of the
+"comparator recovered, A3-D did not" population, fixed before any bucket
+count is computed:**
+
+- **Bucket A — Fewer contacts, lost recovery.** A3-D's `contacts_sent` for
+  that episode (`episode_results.jsonl`) is strictly less than the
+  comparator's, and the comparator recovered the invoice while A3-D did
+  not. Sub-classified, not double-counted:
+  - **A.D1 — STOP-attributable.** A3-D's `ledger.jsonl` shows an explicit
+    `executed_action.action_type == "STOP"` tick for that episode.
+  - **A.D2 — Other fewer-contact loss.** Bucket A minus A.D1 (budget
+    exhaustion, restraint via WAIT, or episode-window end, without an
+    explicit STOP action).
+- **Bucket B — Fewer contacts, recovery preserved.** A3-D's contacts are
+  strictly fewer AND both arms recovered the invoice. Reported as context;
+  contributes zero to the recovery-rate difference (no outcome divergence).
+- **Bucket C — Same contact count, timing difference.** Contact counts are
+  equal, outcomes differ, AND the available artifacts establish a timing
+  mechanism. Pre-declared threshold for "established": only A3-D's own
+  `ledger.jsonl` records per-tick contact days; neither A1 nor
+  A2-strengthened produces any ledger or per-day contact record (only a
+  per-episode total `contacts_sent`, per
+  `docs/DAY8-AUDIT-SAMPLE-RULING.md §2` item 1: "`ledger.jsonl`... is
+  written only for A3-D"). Because the comparator's actual per-episode
+  contact day(s) are not recorded in any published artifact, this bucket
+  is pre-declared **NOT IDENTIFIABLE from available data** for both
+  comparators, decided here, before computing which episodes would
+  otherwise land in it — not decided after seeing that the count is
+  inconvenient.
+- **Bucket D — STOP divergence.** Not a parallel top-level bucket per the
+  stage's own "no double counting" instruction — implemented as sub-bucket
+  A.D1 above, since every STOP-divergence episode this repository can
+  identify (A3-D issuing STOP while holding fewer contacts than a
+  comparator that went on to recover) is by definition already inside
+  Bucket A.
+- **Bucket E — Other / unexplained.** Every remaining member of the
+  "comparator recovered, A3-D did not" population not captured by A or C —
+  concretely: equal contact counts (Bucket C's population, undecomposable
+  per the point above) and the case where A3-D used **more** contacts than
+  the comparator yet still failed to recover. Not forced into A, B, C, or
+  D.
+
+**Binding commitments:**
+
+1. Episode-level pairing uses `episode_index` (present in every arm's
+   `episode_results.jsonl`), the same CRN world-level pairing key
+   `RESULTS.md`'s own paired bootstrap already uses (`EVAL.md §6`,
+   `rrx.sim.run_stage3.paired_bootstrap_ci`) — not a newly invented
+   pairing scheme.
+2. Only fields already present in already-sealed, already-checksummed
+   artifacts (`results/holdout/4d45db461943/*/episode_results.jsonl`,
+   `results/holdout/4d45db461943/a3_d/ledger.jsonl`,
+   `results/holdout/4d45db461943/*/SHA256SUMS`) are used. No new holdout
+   simulation, no re-access of `holdout_indices(authorized=True)`.
+3. `decline_code` stratification uses the existing `opening_condition_key`
+   field verbatim — no new decline-code taxonomy is invented.
+4. If the signed bucket contributions do not reconcile exactly (within
+   floating-point tolerance) to the published rate difference
+   (`RESULTS.md` §7), that is reported as a discrepancy to investigate,
+   not silently absorbed into a bucket.
+5. `scripts/day9_decompose.py` is read-only with respect to every file
+   under `results/holdout/` — it opens those files in read mode only and
+   writes exclusively to `results/day9_decomposition/`.
+
+**Verification required before running the script:** `git diff --stat`
+for this commit touches only `CHANGELOG.md` and (in the same commit)
+`scripts/day9_decompose.py` — no file under `results/holdout/`, `EVAL.md`,
+`configs/`, `src/rrx/agent/`, or `src/rrx/sim/` is modified.
+
 ## Day 9 Stage 1 — net-value / break-even analysis, pre-declaration — 2026-08-30
 
 **Status: a pre-declaration for a post-hoc descriptive analysis, NOT an
