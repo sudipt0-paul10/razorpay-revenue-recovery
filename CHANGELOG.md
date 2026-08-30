@@ -1,5 +1,67 @@
 # Changelog
 
+## Day 9 Stage 7 — documentation reconciliation — 2026-08-31
+
+**Status: a documentation-synchronization pass, NOT an `eval-spec` amendment
+and NOT a methodology change.** No spec version opened or bumped; no file
+under `src/rrx/`, no test, `EVAL.md`, any holdout artifact, or any
+historical result JSON/CSV/ledger changed. `README.md` (previously
+empty) was added in the prior commit; this entry covers the pass that
+followed it.
+
+### What changed
+
+`RESULTS.md`, `LIMITATIONS.md`, `ARCHITECTURE.md`, and `docs/PITCH.md`
+were updated to incorporate the Day 9 Stages 1–4 diagnostic findings
+(`docs/analysis/DAY9-NET-VALUE.md`, `DAY9-DECOMPOSITION.md`,
+`DAY9-FRONTIER.md`), each addition clearly separated from, and
+subordinate to, the frozen holdout content it explains:
+
+- `RESULTS.md` gained a new §14 ("Day 9 Diagnostic Analysis") summarizing
+  the economic analysis, recovery-deficit decomposition, mechanism
+  attribution, dev-only frontier, and R-16 adjudication — appended after
+  the existing, unmodified §1–§13.
+- `LIMITATIONS.md` gained a new §7 ("Day 9 Diagnostic Findings")
+  cross-referencing and extending, never replacing, the existing
+  five-category limitation taxonomy in §1–§6.
+- `ARCHITECTURE.md §4` gained two new paragraphs describing the
+  `withhold_applies` adaptive-contact predicate (identifying it as the
+  mechanism Day 9 diagnostics traced the holdout deficit to) and
+  reinforcing that A3-LLM is a separate, development/tuning-only arm,
+  excluded from holdout entirely.
+- `docs/PITCH.md` gained a new §8A summarizing the economic consequence,
+  the isolated deficit mechanism, and the dev-only frontier finding,
+  inserted between the existing §8 ("What we learned") and §9 (demo
+  script) without altering either.
+
+### What did not change
+
+- The frozen holdout result, `RESULTS.md §1`–`§13`, and every number in
+  them.
+- A3-D's criterion 2 FAIL verdict.
+- The registered cost model (`configs/costs.yaml`).
+- Any disclosed-but-unresolved limitation: the missing `eval-spec-v1.11`/
+  `eval-spec-v1.5` tags, the holdout `run_params.json` metadata defect,
+  the GPT-C1–C6 methodology-integrity question, the sensitivity sweep's
+  0/26 status, and the `R-16` `ambiguous_decline` day-3 `DESIGN-AMBIGUOUS`
+  case are all still open, still disclosed, and not resolved by this
+  entry.
+- The Stage 4 threshold≥3 finding remains labeled DEV-ONLY / exploratory
+  / not holdout-validated everywhere it now appears; no document
+  describes it as a new official agent, a selected configuration, or
+  "A3.1" — none was created.
+- A3-LLM's status: real dev evidence exists (GPT-C1–C6, N=500 per cell);
+  no holdout result exists or is claimed.
+
+### Verification
+
+`git diff --stat` for this commit touches only `RESULTS.md`,
+`LIMITATIONS.md`, `ARCHITECTURE.md`, `docs/PITCH.md`, and this file.
+`ruff check .` and `python -m pytest -q` were re-run after editing and
+reproduce the pre-existing baseline (0 lint errors; 2,284 passed, 1
+pre-existing `test_stage5_falsification.py::test_1_policy_ordering`
+failure, unaltered).
+
 ## Day 9 Stage 4 — R-16 adjudication + dev-only frontier, pre-declaration — 2026-08-30
 
 **Status: a pre-declaration for a diagnostic adjudication (Part A) plus a

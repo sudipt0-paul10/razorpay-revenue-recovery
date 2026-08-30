@@ -481,3 +481,113 @@ or supersede any of them, and none of the above limitations required or
 resulted in any change to those diagrams, `EVAL.md`, `docs/A3-DESIGN.md`,
 `CHANGELOG.md`, `results/tuning_log.md`, evaluation configuration, source
 code, or tests.
+
+---
+
+## 7. Day 9 Diagnostic Findings
+
+Appended after the Day 8 holdout seal, from post-hoc diagnostic analysis
+of the already-sealed holdout artifacts (`docs/analysis/DAY9-*.md`). This
+section adds new, Day-9-specific findings; it does not revise, and has
+no power to revise, §1–§6 above or `RESULTS.md`'s frozen verdicts. Every
+item below is read-only, dev-only, or diagnostic-only in the same sense
+already established throughout this document.
+
+### 7.1 A3-D holdout underperformance
+
+Not a new limitation so much as the headline fact everything below
+explains: A3-D failed `EVAL.md §7` criterion 2 on both primary metrics
+against its holdout comparator set (`RESULTS.md §7`). This document does
+not restate the full verdict here — see §3.2 above and `RESULTS.md §3A`
+— but the Day 9 diagnostic sections that follow all exist specifically
+to explain *why*, not to contest *that*.
+
+### 7.2 Economic analysis boundary
+
+`docs/analysis/DAY9-NET-VALUE.md`'s break-even calculation uses only
+already-published aggregates (`RESULTS.md`, sealed `metrics.json` files)
+and the already-registered cost model (`configs/costs.yaml`) — it does
+**not** aggregate unpublished per-episode holdout data into a new
+official ₹ metric. Consequently, the exact arm-conditional mean
+recovered-invoice value is **not available** from anything that analysis
+used; it substitutes two labeled reference values (registered population
+median; the lognormal population mean implied by the same registered
+distribution parameters) rather than inventing or measuring one. This is
+a **post-hoc descriptive economic re-expression**, not a pre-registered
+`EVAL.md §7` metric.
+
+### 7.3 Comparator per-episode timing is not reconstructable
+
+Neither A1 nor A2-strengthened produces a per-tick ledger or any per-day
+contact record — only a per-episode total `contacts_sent`
+(`docs/DAY8-AUDIT-SAMPLE-RULING.md §2` item 1). Day 9 Stage 2's
+decomposition (`docs/analysis/DAY9-DECOMPOSITION.md`) therefore marks
+same-contact-count timing divergence (its "Bucket C") explicitly **NOT
+IDENTIFIABLE** — no artifact exists that could establish which day
+either comparator's contacts were actually sent, for any episode.
+
+### 7.4 26 A1 recovery-loss episodes remain unexplained
+
+Of the 73 holdout episodes where A1 recovered an invoice A3-D did not,
+47 are explained by the fewer-contact/withhold mechanism (§7.5 below);
+**26 remain unexplained** by any category Day 9 Stage 2's pre-declared
+decomposition defined — 21 with equal contact counts (see §7.3), 5 where
+A3-D used *more* contacts than A1 yet still lost the invoice. No episode
+was forced into an explained bucket to avoid reporting this residual
+(`docs/analysis/DAY9-DECOMPOSITION.md §12`).
+
+### 7.5 Dominant deficit mechanism, and its limits
+
+Day 9 Stage 3 (`docs/analysis/DAY9-DECOMPOSITION.md`, Stage 3 section)
+attributes A3-D's holdout behavior to `EVAL.md §3.4`'s three
+pre-registered advantage sources using the ledger's structured
+`rationale` field. Finding, stated with the sign the result actually
+has: **within-episode adaptive contact — specifically rule `R-13`'s
+day-3 `withhold_applies` gate — is the dominant mechanism behind the
+deficit**, not an uplift source here. It explains 59/59 of the
+A2-strengthened deficit episodes and 41/47 of the A1
+fewer-contact-attributable deficit episodes. Retry-window timing and
+remedy matching are both empirically clean (remedy matching: 100% among
+A3-D's actual contacts) and are not implicated. **This is attribution
+from structured ledger fields cross-referenced against the already-frozen
+design record, not a causal proof from a counterfactual holdout run** —
+no second holdout exists to test what a different rule would have
+produced.
+
+### 7.6 Dev-only restraint-threshold frontier
+
+Day 9 Stage 4 (`docs/analysis/DAY9-FRONTIER.md`) swept A3-D's withhold
+threshold on `dev` only, via a parameterized copy of the decision table
+kept entirely outside `src/rrx/agent/` — the frozen policy module was
+never edited. A threshold ≥3 setting dominated A1 and improved on
+A2-strengthened on `dev`, backed by a paired-bootstrap CI excluding
+zero. **This is DEV-ONLY, exploratory evidence.** It was not, and under
+`EVAL.md §3.5`'s single-use rule cannot be, holdout-validated for this
+candidate. No new policy, configuration, or "A3.1" was created or
+selected from it — the frozen A3-D holdout result (threshold=2) is
+unchanged and remains the only holdout-scored configuration.
+
+### 7.7 `R-16` `ambiguous_decline` day-3 case
+
+Day 9 Stage 4's adjudication of the decision table's default-fallthrough
+rule (`R-16`) found no `DESIGN GAP` — most firings are `EXPECTED
+FALLTHROUGH`, directly traceable to already-frozen design text. One
+category, `ambiguous_decline` on day 3 (7.6% of `R-16` firings),
+remains **`DESIGN-AMBIGUOUS`**: a plausible partial mechanical
+justification exists but does not fully cover this bucket's card-caused
+half, and no sentence in `docs/A3-DESIGN.md §10A.5` confirms the gap was
+deliberate. **This ambiguity is not resolved by this document or by
+Day 9** — it is recorded as open.
+
+### 7.8 Cross-references, not new findings
+
+The following Day 9-relevant items were already present in §1–§6 above
+before Day 9 and are unchanged by it — listed here only so this section
+is a complete index of what a reader should check for Day 9 consistency:
+A3-LLM's dev-only, N=500-per-cell evidence with no holdout run of any
+kind (§3.1); the sensitivity sweep at 0/26 cells complete (§3.3);
+budget-exhaustion's structural-but-not-runtime-tested status (§2.2); and
+mid-episode state change remaining specified but architecturally
+unreachable in `sim-v1` (§2.3). Day 9 did not touch any of these facts —
+independently re-verified against source and sealed artifacts during the
+Day 9 series, and found unchanged.

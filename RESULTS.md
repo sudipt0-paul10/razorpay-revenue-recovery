@@ -105,3 +105,67 @@ No parameter, prompt, policy, config, threshold, or comparator rule was changed 
 ## 13. Known provenance caveat
 
 `results/holdout/4d45db461943/a3_d/run_params.json` records `"policy": "<unknown>"` and `"runner": "rrx.sim.engine.run_episode"` — both incorrect (A3-D actually executes via `rrx.harness.runner.run_episode_a3` / `rrx.agent.policy.a3d_policy`). This is a **pre-existing** documentation/metadata defect in `src/rrx/eval/arms.py`'s `_POLICY_QUALNAME` dict (missing an `ARM_A3D` entry) — confirmed present, identically, in the already-committed `results/stress-20260829-a3d/run_params.json` from Stage 7.3, well before Day 8. **It did not affect execution or any numerical result above**: `manifest.json`'s `arm` field is correct (`"A3-D"`), the actual code path executed was independently confirmed correct, and every metric in this document was independently recomputed from `episode_results.jsonl` and matched the committed `metrics.json` exactly.
+
+---
+
+## 14. Day 9 Diagnostic Analysis
+
+**Status: post-hoc descriptive diagnostic analysis, performed after this document's §1–§13 were sealed.** Nothing below is a pre-registered `EVAL.md §7` criterion, changes any number in §1–§13 above, or has any power to revise the criterion 2 FAIL verdict. Each subsection summarizes one Day 9 stage's full write-up; the linked document is authoritative for method, evidence standard, and complete numbers — this section is a summary, not a replacement.
+
+### 14.1 Economic analysis (Day 9 Stage 1)
+
+Full document: [`docs/analysis/DAY9-NET-VALUE.md`](docs/analysis/DAY9-NET-VALUE.md).
+
+**A post-hoc descriptive economic re-expression** of the §1–§13 holdout result, using the already-registered cost model (`configs/costs.yaml`) unchanged:
+
+- A3-D saves **907 contacts vs. A1** (2,871 vs. 3,778) and **755 contacts vs. A2-strengthened** (2,871 vs. 3,626).
+- Registered effective contact cost: **₹1.115/contact** (₹0.115 WhatsApp + ₹1.00 annoyance penalty, both from `configs/costs.yaml`).
+- Break-even effective contact cost — the price at which A3-D's contact savings would exactly offset its lost invoice-recovery value — is **₹92.58–₹152.64 vs. A1** and **₹134.50–₹221.75 vs. A2-strengthened**, depending on which of two labeled invoice-value references is used (registered population median vs. the lognormal population mean implied by the same registered distribution parameters — neither is a measured per-arm recovered value, since none is published).
+- Both ranges are roughly two orders of magnitude above the actual registered ₹1.115 cost: under the registered cost model, A3-D's contact savings recover under ~1.3% of the value its recovery deficit forfeits.
+- **No monetary break-even exists for subscription rescue.** No LTV or cancellation-hazard value is registered anywhere in this project's cost model (`configs/costs.yaml` has no such field; `EVAL.md §3.3`'s cancellation-hazard mechanic is unimplemented in the simulator), so no ₹ value can be attached to a rescue, and none is claimed.
+
+### 14.2 Recovery-deficit decomposition (Day 9 Stage 2)
+
+Full document: [`docs/analysis/DAY9-DECOMPOSITION.md`](docs/analysis/DAY9-DECOMPOSITION.md).
+
+Episode-level, paired decomposition of the holdout invoice-recovery deficit, using episode-index pairing (the same CRN key the frozen paired bootstrap already uses):
+
+**Against A2-strengthened:** 59 episodes where the comparator recovered and A3-D did not (comparator-only), 7 where A3-D recovered and the comparator did not (A3-D-only). **59/59 (100%) of the deficit episodes trace to fewer-contact, WAIT/withhold-driven behavior** (Bucket A); **0 are STOP-attributable**.
+
+**Against A1:** 73 comparator-only, 30 A3-D-only. **47/73 are explained by the same fewer-contact/withhold mechanism; 26 remain unexplained** (Bucket E — 21 with equal contact counts, 5 where A3-D used *more* contacts than A1 yet still lost).
+
+**Same-contact-count timing divergence (Bucket C) is explicitly NOT IDENTIFIABLE** — neither A1 nor A2-strengthened produces a ledger or any per-day contact record (only a per-episode total `contacts_sent`), so no artifact can establish which day their contacts were sent.
+
+### 14.3 Mechanism attribution (Day 9 Stage 3)
+
+Full document: [`docs/analysis/DAY9-DECOMPOSITION.md`](docs/analysis/DAY9-DECOMPOSITION.md) (Stage 3 section).
+
+Attribution of A3-D's holdout behavior to `EVAL.md §3.4`'s three pre-registered advantage sources, using the ledger's structured `rationale` (decision-table rule id) field, cross-referenced against `docs/A3-DESIGN.md §10A.5`'s already-frozen per-rule basis text:
+
+- **Retry-window timing:** empirically visible (2,193 wakeup ticks reason about it), but **zero measurable contribution to the deficit** — neither deficit population contains an episode from the decline buckets these rules govern.
+- **Remedy matching:** **100% match rate among A3-D's actual holdout contacts** (0 mismatches / 2,871 contacts) — **zero deficit contribution**. The deficit is about contacts not sent, never a wrong remedy on one that was sent.
+- **Within-episode adaptive contact: the dominant mechanism.** Rule `R-13`'s day-3 `withhold_applies` gate directly explains **59/59 of the A2-strengthened deficit episodes** and **41/47 of the A1 fewer-contact-attributable deficit episodes** (identified by decline-code composition, not the full 73 — see §14.2).
+- **STOP divergence: zero.** None of A3-D's 311 holdout STOP actions overlap with either comparator's deficit population — the mechanism is withheld contacts (WAIT), never active disengagement.
+- **Cancelled-at-open contamination: definitively ruled out.** Verified against both source (`src/rrx/harness/runner.py`) and the sealed ledger: all 111 `subscription_cancelled_by_customer` holdout episodes produce zero contacts and zero ledger records, identically across every arm — this bucket cannot contaminate any restraint statistic, structurally, not by argument.
+
+**This is attribution, not causal proof.** It identifies which decision-table rule is empirically associated with each outcome and cross-checks that association against the design record; it does not run a counterfactual holdout to establish that a different rule would have changed the sealed result.
+
+### 14.4 Dev-only frontier (Day 9 Stage 4)
+
+Full document: [`docs/analysis/DAY9-FRONTIER.md`](docs/analysis/DAY9-FRONTIER.md).
+
+**DEV-ONLY. Not holdout data, not a holdout claim, and not a new official agent.** A3-D's frozen withhold threshold (`2`, the value actually evaluated on holdout and reported in §1–§13 above) was swept on `dev` only, via a parameterized copy of the decision table kept entirely outside `src/rrx/agent/` — `src/rrx/agent/policy.py` was never modified.
+
+- The grid `{1,...,7}` collapsed to two dev-observed regimes: `{1,2}` (identical to the frozen setting) and `{3,...,7}` (a single "unrestrained" regime).
+- At threshold ≥3 on `dev`: invoice recovery **0.4920**, subscription rescue **0.5445**, total contacts **3,710** — vs. the frozen threshold=2 dev result (0.4670 / 0.5305 / 2,825) and the dev comparators A1 (0.4840 / 0.5095 / 3,780) and A2-strengthened (0.4830 / 0.5385 / 3,651).
+- This dev-only setting **dominated A1 on the measured dev axes** (higher recovery, higher rescue, fewer contacts) and improved on A2-strengthened on both primary metrics (at higher contact cost). Paired dev bootstrap (frozen procedure, threshold 3 vs. 2): invoice +0.0250 CI [+0.0185, +0.0320], rescue +0.0140 CI [+0.0065, +0.0215] — both exclude zero. Full figures: `DAY9-FRONTIER.md §5`.
+- **This is DEV-ONLY evidence and was NOT holdout validated.** `holdout` was not re-accessed to test it, cannot be re-accessed for this candidate (`EVAL.md §3.5`, single-use), and no claim is made that it would replicate. It is not, and is not described anywhere as, a new official agent, a selected configuration, or "A3.1" — none was created.
+
+### 14.5 R-16 adjudication (Day 9 Stage 4, Part A)
+
+Full document: [`docs/analysis/DAY9-FRONTIER.md`](docs/analysis/DAY9-FRONTIER.md) (§2).
+
+Classification of every holdout `R-16` (decision-table default fallthrough) firing against the frozen design text:
+
+- **No `DESIGN GAP` found.** Most `R-16` firings (74.9%) are `EXPECTED FALLTHROUGH`, directly or closely traceable to `docs/A3-DESIGN.md §10A.5`'s existing text (e.g. R-11's basis explicitly names days 7/14 as intended fallthrough days). A further 17.5% are not "no rule" cases at all — they are the `R-13` withhold-gated mechanism already covered in §14.3.
+- **`ambiguous_decline` on day 3 (7.6% of `R-16` firings) remains `DESIGN-AMBIGUOUS`.** A plausible partial justification exists (the funds-caused half of this bucket is mechanically dead past day 2, by the same proof that governs `insufficient_funds`), but it does not fully cover the card-caused half, and no sentence in the frozen design text confirms this gap was deliberate. **This ambiguity is not resolved here** — it is reported exactly as `docs/analysis/DAY9-FRONTIER.md` leaves it.
