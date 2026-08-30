@@ -163,6 +163,21 @@ def main() -> None:
         if r["reason_code"] == "no_engagement_restraint" and r["rationale"] == "R-16"
     )
 
+    # R-16 is a catch-all: disambiguate its tick==3 firings by decline_code, since
+    # only CARD_BROKEN (where R-13 would otherwise have matched) is structurally
+    # attributable to the AC withhold predicate -- other buckets (e.g.
+    # ambiguous_decline) have no day-3 rule at all regardless of engagement, so
+    # their R-16-at-day-3 firings are NOT AC-attributable.
+    CARD_BROKEN = {"card_expired", "debit_instrument_blocked", "card_not_enabled_group"}
+    r16_t3_by_decline = Counter()
+    for r in wakeups:
+        if r["tick"] == 3 and r["rationale"] == "R-16":
+            idx = int(r["episode_id"].split("-")[1])
+            dc = a3d_results[idx]["opening_condition_key"]
+            r16_t3_by_decline[dc] += 1
+    r16_t3_ac_attributable = sum(v for k, v in r16_t3_by_decline.items() if k in CARD_BROKEN)
+    r16_t3_not_ac_attributable = sum(v for k, v in r16_t3_by_decline.items() if k not in CARD_BROKEN)
+
     result = {
         "rule_firing_distribution_all_wakeups": dict(rule_counts),
         "mechanism_totals_all_wakeups": dict(mechanism_totals),
@@ -186,6 +201,9 @@ def main() -> None:
                 Counter(tick for tick, rule in fallthrough_no_engagement_by_tick_rule).items()
             )
         },
+        "r16_at_t3_by_decline_code": dict(r16_t3_by_decline),
+        "r16_at_t3_AC_attributable_card_broken": r16_t3_ac_attributable,
+        "r16_at_t3_NOT_AC_attributable_no_day3_rule": r16_t3_not_ac_attributable,
     }
 
     # ---- Stage 2 Bucket A cross-check + rule-id stratification ----

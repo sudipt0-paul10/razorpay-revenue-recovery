@@ -1,0 +1,179 @@
+{
+  "rule_firing_distribution_all_wakeups": {
+    "R-12": 684,
+    "R-16": 3740,
+    "R-13": 126,
+    "R-11": 713,
+    "R-08": 651,
+    "R-10": 971,
+    "R-14": 453,
+    "R-15": 112,
+    "R-07": 270,
+    "R-04": 152,
+    "R-02": 24,
+    "R-09": 132,
+    "R-03": 17
+  },
+  "mechanism_totals_all_wakeups": {
+    "RM": 2871,
+    "AC": 1341,
+    "RWT": 2193
+  },
+  "n_wakeups_total": 8045,
+  "contact_tick_histogram": {
+    "0": 1788,
+    "2": 244,
+    "3": 126,
+    "5": 713
+  },
+  "contacts_within_or_at_retry_boundary_day3": 2158,
+  "contacts_after_retry_boundary_day3": 713,
+  "n_contacts_total": 2871,
+  "withhold_at_t3_count": 972,
+  "withhold_at_t3_by_rule": {
+    "R-16": 702,
+    "R-07": 270
+  },
+  "withhold_all_count": 4744,
+  "withhold_in_declared_retry_window_ticks_1_to_3": 3605,
+  "withhold_after_retry_window_tick_gt_3": 1122,
+  "withhold_at_day0": 17,
+  "remedy_mismatch_count": 0,
+  "remedy_mismatch_examples": [],
+  "n_contacts_checked_for_remedy_match": 2871,
+  "ac_rule_firings_by_tick": {
+    "1": 651,
+    "2": 564,
+    "3": 126
+  },
+  "fallthrough_no_engagement_R16_by_tick": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 1,
+    "6": 1,
+    "7": 1,
+    "14": 1
+  },
+  "r16_at_t3_by_decline_code": {
+    "card_expired": 199,
+    "debit_instrument_blocked": 159,
+    "ambiguous_decline": 285,
+    "card_not_enabled_group": 59
+  },
+  "r16_at_t3_AC_attributable_card_broken": 417,
+  "r16_at_t3_NOT_AC_attributable_no_day3_rule": 285,
+  "stage2_bucket_a_mechanism_crosscheck": {
+    "a1": {
+      "bucket_a_count_rederived": 47,
+      "rule_at_last_wakeup_distribution": {
+        "R-16": 47
+      }
+    },
+    "a2_strengthened": {
+      "bucket_a_count_rederived": 59,
+      "rule_at_last_wakeup_distribution": {
+        "R-16": 56,
+        "R-11": 3
+      }
+    }
+  },
+  "rule_mechanism_map": {
+    "R-01": {
+      "tags": [],
+      "note": "defensive, structurally unreachable on a real tick (\u00a710A.5)"
+    },
+    "R-02": {
+      "tags": [],
+      "note": "FORCED by gate R4; not an advantage-source mechanism"
+    },
+    "R-03": {
+      "tags": [
+        "RWT"
+      ],
+      "note": "FORCED mechanically -- no retry window ever exists for this code"
+    },
+    "R-04": {
+      "tags": [
+        "RWT"
+      ],
+      "note": "FORCED -- WAIT because auto-retry window still open"
+    },
+    "R-05": {
+      "tags": [
+        "RWT"
+      ],
+      "note": "retries exhausted, window closed"
+    },
+    "R-06": {
+      "tags": [
+        "RWT"
+      ],
+      "note": "halted -- window closed"
+    },
+    "R-07": {
+      "tags": [
+        "RWT"
+      ],
+      "note": "day>=3 -- window mechanically dead (funds-acceleration proof)"
+    },
+    "R-08": {
+      "tags": [
+        "RWT",
+        "RM"
+      ],
+      "note": "topup remedy sent on the earliest in-window day"
+    },
+    "R-09": {
+      "tags": [
+        "RWT",
+        "RM",
+        "AC"
+      ],
+      "note": "topup remedy, last in-window day, gated by withhold_applies"
+    },
+    "R-10": {
+      "tags": [
+        "RWT",
+        "AC"
+      ],
+      "note": "WAIT; reason_code itself distinguishes RWT (retry_window_open) from AC (no_engagement_restraint)"
+    },
+    "R-11": {
+      "tags": [
+        "RM"
+      ],
+      "note": "post-halt remedy match, explicitly EXEMPT from the withhold test (\u00a710A.5 [D-7])"
+    },
+    "R-12": {
+      "tags": [
+        "RM"
+      ],
+      "note": "day-0 remedy match, fixed schedule (adopted from A2), not withhold-gated"
+    },
+    "R-13": {
+      "tags": [
+        "RM",
+        "AC"
+      ],
+      "note": "day-3 remedy match, gated by withhold_applies -- the Stage 2 divergence rule"
+    },
+    "R-14": {
+      "tags": [
+        "RM"
+      ],
+      "note": "day-0 fail-safe remedy, not withhold-gated"
+    },
+    "R-15": {
+      "tags": [
+        "RM",
+        "AC"
+      ],
+      "note": "day-2 hedge remedy, gated by withhold_applies"
+    },
+    "R-16": {
+      "tags": [],
+      "note": "named default/fallthrough -- diagnostic only, not itself an advantage-source mechanism"
+    }
+  }
+}

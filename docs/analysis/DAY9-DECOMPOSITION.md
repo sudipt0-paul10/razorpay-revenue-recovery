@@ -383,3 +383,360 @@ that directory, reports **all 21 files `OK`** — every sealed holdout
 artifact (including `a3_d/ledger.jsonl`) is byte-identical to its sealed
 checksum. This diagnostic analysis read those files but did not modify,
 regenerate, or touch `results/holdout/` in any way.
+
+---
+
+## Stage 3 — Mechanism Attribution
+
+**Status:** Day 9, Stage 3 only. Attributes A3-D's holdout behavior — and
+specifically the Stage 2 deficit population — to `EVAL.md §3.4`'s three
+pre-registered advantage sources. Pre-declared in `CHANGELOG.md` ("Day 9
+Stage 3 — mechanism attribution, pre-declaration", committed `cc86ba6`)
+before `scripts/day9_mechanism_attribution.py` was run. Diagnostic only;
+does not change any Stage 0–2 finding or `RESULTS.md`'s criterion 2
+verdict.
+
+### 1. Scope and contamination boundary
+
+This section answers: **which of `EVAL.md §3.4`'s three declared
+mechanisms are empirically visible in A3-D's holdout ledger, and how do
+they relate to the Stage 2 deficit?**
+
+Method: every A3-D wakeup ledger record carries `rationale` — the exact
+decision-table rule id (`R-01`…`R-16`) that fired
+(`docs/A3-DESIGN.md §10A.4`). Each rule's mechanism association is read
+verbatim from `docs/A3-DESIGN.md §10A.5`, a document frozen under tag
+`eval-spec-v1.5` before any A3-D episode was ever executed. This is a
+structured-field lookup, not an inference from free-text `rationale`
+narrative (there is none — A3-D never calls an LLM, so `raw_output` is
+always `null`; `rationale` here is the rule id string itself, a
+closed-vocabulary structured field).
+
+Script: `scripts/day9_mechanism_attribution.py` (committed `cc86ba6`,
+before execution). Output:
+`results/day9_decomposition/mechanism_attribution.json`. Read-only
+against `results/holdout/`; re-verified `OK` against `SHA256SUMS` after
+running (§ Stage 2 holdout-integrity note above covers the same check,
+re-run after this script also).
+
+**Integrity cross-check, required by the pre-declaration and satisfied:**
+re-deriving Stage 2's Bucket A membership from the identical rule (fewer
+contacts, comparator recovered, A3-D did not) reproduces **47** (vs. A1)
+and **59** (vs. A2-strengthened) exactly —
+`mechanism_attribution.json`, `stage2_bucket_a_mechanism_crosscheck.*.bucket_a_count_rederived`
+— matching `docs/analysis/DAY9-DECOMPOSITION.md` §6 above byte-for-byte.
+
+### 2. Retry-window timing
+
+**MEASURED**, `mechanism_attribution.json`:
+
+- **Contact timing relative to the retry/halt boundary (day 3,
+  `configs/episode.yaml:61`, `halt_boundary_day: 3`):** of 2,871 total
+  contacts, **2,158 (75.2%)** occur at or before day 3 (within the
+  invoice-recovery-relevant window); **713 (24.8%)** occur after day 3.
+  **All 713** post-boundary contacts are rule `R-11` (post-halt rescue,
+  day 5 only) — `rule_firing_distribution_all_wakeups.R-11 = 713` matches
+  `contacts_after_retry_boundary_day3 = 713` exactly. No other rule ever
+  sends a contact after day 3.
+- **Withhold at T+3:** **972** wakeup ticks at `tick == 3` produce a
+  WAIT/STOP with `reason_code = no_engagement_restraint`, split by rule:
+  **702 via `R-16`** (the default fallthrough) and **270 via `R-07`**
+  (`insufficient_funds`, day ≥ 3 — `[FORCED mechanically]` per §10A.5,
+  tagged retry-window timing, not adaptive contact).
+- **Withhold inside vs. outside the declared retry window:** **3,605**
+  withhold ticks (`reason_code=no_engagement_restraint`, WAIT/STOP) occur
+  at `tick` 1–3 (inside the auto-retry window); **1,122** occur at
+  `tick > 3` (after the window closes); **17** occur at `tick == 0`.
+- **The 17 `tick == 0` withholds are entirely rule `R-03`**
+  (`transaction_limit_exceeded`, unconditional, day-independent, `[FORCED
+  mechanically]`) — verified directly against the ledger. This does
+  **not** contradict `docs/A3-DESIGN.md §10A.3`'s claim that "the first
+  agent contact is never withheld [by the AC predicate]" — `R-03` is a
+  different, unconditional rule untouched by `withhold_applies`; the
+  AC-gated rules (R-09, R-10, R-13, R-15) never fire at `tick == 0` in
+  this data, consistent with the design claim.
+
+**For the Stage 2 loss episodes:** §8 above already established the
+timing pattern (A1: 47/47 at tick 3; A2-strengthened: 41 at tick 3, 3 at
+tick 5, 15 at tick 14). Mechanism-2/3 sections below connect this to the
+specific rules involved.
+
+**Comparator limitation, restated:** A1 and A2-strengthened have no
+per-day contact record (`docs/DAY8-AUDIT-SAMPLE-RULING.md §2` item 1), so
+none of the above can be compared against the *comparator's* actual
+timing — only against the documented, fixed T+0/T+3 (A1) or
+condition-aware T+0/T+3/T+5 (A2-strengthened) schedules named in
+`EVAL.md §4.3`/`§4.1.2`. This is a design-document reference, not a
+per-episode artifact comparison. **No causal claim is made from the
+tick=3 correlation alone** — §4 below traces the specific rule mechanics
+that make the correlation causally interpretable in this case.
+
+### 3. Remedy matching
+
+**MEASURED**, `mechanism_attribution.json`:
+
+- **Remedy-match rate: 2,871 / 2,871 (100%).** Every `CONTACT` action's
+  `reason_code` is admissible for that episode's `opening_condition_key`
+  (decline code) per `src/rrx/agent/reason_codes.ADMISSIBLE_DECLINE_CODES`
+  — `remedy_mismatch_count = 0`. This is an empirical confirmation, on
+  real holdout ledger data, of gate-compliance-by-construction
+  (`docs/A3-DESIGN.md §10A.6`; also unit-tested at the policy level by
+  `tests/test_a3d_policy.py`'s 40/40 totality tests) — not a new proof,
+  a cross-check that the deployed holdout run matches the proven
+  property.
+- **Remedy selection across decline buckets (rule-level):** `R-08`
+  (topup, day 0, `insufficient_funds`) 651 firings; `R-12` (card_change,
+  day 0, `CARD_BROKEN`) 684; `R-14` (card_change, day 0,
+  `ambiguous_decline`) 453; `R-09`/`R-13`/`R-15` (day-2/3 follow-up
+  remedies, all withhold-gated) 132/126/112; `R-11` (post-halt
+  card_change) 713.
+- **Among the recovery-loss episodes: remedy mismatch is not a measurable
+  contributor.** Since remedy-match is 100% across all 2,871 holdout
+  contacts (including every contact inside both Stage 2 deficit
+  populations), no lost recovery in Bucket A can be attributed to A3-D
+  proposing the wrong remedy — the contacts A3-D *did* send in those
+  episodes (e.g. the day-0 `R-12`/`R-08` contact) always match the
+  declared correct remedy for that decline bucket. The deficit is driven
+  entirely by contacts A3-D **did not send**, not by a wrong remedy on a
+  contact it did send.
+- **Is remedy matching separable from contact-withholding? NOT
+  SEPARABLE for four of the seven `CONTACT` rules.** `R-09`, `R-13`, and
+  `R-15` combine a remedy decision and the `AC` withhold gate in a single
+  ordered condition (`"day == N and not withhold_applies"`); `R-08`
+  combines remedy matching with retry-window timing (earliest in-window
+  day). Only `R-12`, `R-14` (day-0, unconditional) and `R-11`
+  (post-halt, explicitly withhold-exempt) select a remedy independent of
+  any other mechanism. This fusion is a property of the frozen decision
+  table (`docs/A3-DESIGN.md §10A.4`), not an artifact of this analysis —
+  see §5 below.
+
+**Comparator limitation:** A1's and A2-strengthened's remedy choices per
+episode are not recorded in any artifact beyond the aggregate
+`card_change_for_insufficient_funds` gate-check field
+(`results/holdout/4d45db461943/a1/metrics.json`); their remedy logic is
+fully described in `EVAL.md §4.3`/`§4.1.2` as fixed, condition-keyed
+rules, not per-episode adaptive decisions, so no per-episode
+remedy-match rate is computable or meaningful for them the way it is for
+A3-D.
+
+### 4. Within-episode adaptive contact
+
+**MEASURED**, `mechanism_attribution.json`:
+
+- **The predicate's only implementation is `withhold_applies` (`observations
+  >= 2 and not any_engaged`), `docs/A3-DESIGN.md §10A.3`.** It gates
+  exactly four rules: `R-09`, `R-10`, `R-13`, `R-15` — **1,341** total
+  wakeup ticks (`AC` tag total), 16.7% of all 8,045 wakeup ticks.
+- **How restraint compounds with prior contacts:** `R-16`'s tick-3
+  firings (702 total) split by decline code — **417 (59.4%) are
+  `CARD_BROKEN`** (`card_expired` 199, `debit_instrument_blocked` 159,
+  `card_not_enabled_group` 59), for which `R-13` (the AC-gated day-3
+  remedy rule) would have matched and sent a contact **had
+  `withhold_applies` been false** — this 417 is the directly
+  AC-attributable component. The remaining **285 (40.6%) are
+  `ambiguous_decline`**, which has no day-3 rule at all (`R-14`/`R-15`
+  cover only day 0/2) — these fall to `R-16` regardless of engagement
+  history and are **not** AC-attributable, disambiguated here rather
+  than left folded into a single "no_engagement_restraint" total.
+- **`no_engagement_restraint` is a heavily overloaded label — not a
+  reliable proxy for the AC mechanism on its own.** It is the static
+  `reason_code` for five mechanically-forced STOP rules (`R-01`, `R-03`,
+  `R-05`, `R-06`, `R-07` — none use `withhold_applies`) in addition to
+  the genuinely adaptive `R-09`/`R-10`/`R-13`/`R-15` and the default
+  `R-16`. Counting every `no_engagement_restraint` occurrence as "the
+  agent adapted to non-engagement" would overstate the AC mechanism's
+  footprint; this document does not do that (§2 above already separated
+  the 270 `R-07` instances at tick 3 from the 702 `R-16` instances on
+  exactly this basis).
+- **`R-16`'s overall firing rate (3,740 / 8,045 = 46.5% of all wakeup
+  ticks) is high enough that `docs/A3-DESIGN.md §10A.5`'s own stated
+  diagnostic criterion applies** ("a rate materially above expectation
+  indicates the table has a hole... to be reported rather than silently
+  patched"). By tick: 1,137 (day 1), 779 (day 2), 702 (day 3), 73 (day
+  4), 59 (day 6), 495 (day 7), 495 (day 14). Days 4 and 6 are not in the
+  fixed wake-up set `{0,1,2,3,5,7,14}` (`docs/A3-DESIGN.md §5`), so these
+  are engagement-triggered extra wake-ups for which the table has no
+  bespoke rule at all — an expected use of the default, not evidence of
+  a hole. Days 7 and 14 (990 combined) are late fixed wake-ups after
+  every bucket's dedicated rules (through `R-15`) or rescue attempt
+  (`R-11`, day 5 only) have already fired or been forgone — also an
+  expected default. Days 1–3 (2,618 combined, 70% of all `R-16` firings)
+  are the ambiguous case: for several decline-code/day combinations
+  (e.g. `ambiguous_decline` at day 1 or day 3, `CARD_BROKEN` at day 1 or
+  2) no dedicated rule was ever written for that specific day, so `R-16`
+  fires regardless of engagement. **This document does not resolve
+  whether that specific gap is a missed design opportunity or an
+  intentional economy of rules** — that judgment is out of scope for a
+  diagnostic stage that must not propose or evaluate a design change
+  (contamination rule 5/6). It is reported as a measured fact and an
+  open question, not resolved either way.
+- **Is the T+3 restraint behavior dependent on episode history? Yes,
+  for the `CARD_BROKEN` bucket specifically, and this is directly
+  traceable, not inferred:** `withhold_applies` requires `observations >=
+  2` — by day 3, an episode with no engagement has accumulated the day-0
+  auto-email plus the day-0 agent contact (`R-12`), satisfying the
+  `>= 2` threshold; if neither engaged, `R-13`'s day-3 contact is
+  withheld and control falls to `R-16`. This is exactly the mechanism
+  `docs/A3-DESIGN.md §10A.5` describes for `R-13`, confirmed empirically
+  in ledger records rather than assumed from the design text alone (see
+  the three-episode trace under §5 below).
+- **Connecting Stage 2 loss episodes directly:** `stage2_bucket_a_mechanism_crosscheck`
+  (re-derived, matching Stage 2 exactly):
+  - vs. A1 (n=47): **47/47** last-wakeup rule is `R-16`.
+  - vs. A2-strengthened (n=59): **56/59** last-wakeup rule is `R-16`;
+    **3/59** last-wakeup rule is `R-11`.
+
+  The 3 `R-11`-last-wakeup episodes (9159, 9921, 10098 —
+  `results/holdout/4d45db461943/a3_d/ledger.jsonl`, verified by direct
+  trace) all show the identical pattern: `R-12` (day 0 contact) →
+  `R-16`/WAIT (days 1, 2, **and 3** — the AC-attributable withhold) →
+  `R-11`/CONTACT (day 5, post-halt rescue). Their day-3 divergence from
+  A2-strengthened is the same AC mechanism as the other 56; the later
+  `R-11` firing is a subsequent, invoice-recovery-irrelevant rescue
+  attempt (post-halt structurally cannot affect invoice recovery,
+  `docs/A3-DESIGN.md §10A.5` R-11 basis / `RESULTS.md` §9), not a
+  different cause. **All 59 of the A2-strengthened deficit episodes are
+  therefore traceable to the same single mechanism: the day-3
+  `withhold_applies` gate on rule `R-13` for the `CARD_BROKEN` bucket.**
+  For A1, all 47 Bucket-A episodes' last wakeup is `R-16` at tick 3
+  (§8 above); decline-code composition (§7 above: 41/47 `CARD_BROKEN`,
+  6/47 `ambiguous_decline`) means **41 of the 47 are AC-attributable by
+  the same `R-13` mechanism, and 6 are not** (`ambiguous_decline` has no
+  day-3 rule, so those 6 episodes' `R-16` firing at tick 3 is structural,
+  not AC-caused — consistent with §7's finding that `ambiguous_decline`
+  also dominates Bucket E's `more_contacts` subgroup).
+
+### 5. §3.4 attribution summary
+
+| Mechanism | Empirically visible? | Quantifiable contribution | Relationship to Stage 2 deficit | Separable? |
+|---|---|---|---|---|
+| **Retry-window timing** | Yes — 2,193 wakeup ticks (`R-03,04,05(0),06(0),07,08,09,10`) reason explicitly about the retry/halt boundary; 100% of post-day-3 contacts are the single `R-11` post-halt rule. | Directly countable (§2). | Present in the deficit population only as background (e.g. `R-07`'s 270 tick-3 STOPs are RWT, not AC, and do not appear in either Stage 2 Bucket A population — `insufficient_funds` is absent from both Bucket A decline-code breakdowns, §7). **No measurable direct contribution to the invoice-recovery deficit** — the deficit populations (§7) contain zero `insufficient_funds`/`bank_technical_error`/`transaction_limit_exceeded` episodes, the buckets RWT rules govern. | Separable from AC in most rules (R-03,04,05,06,07); fused with RM+AC in R-08/R-09. |
+| **Remedy matching** | Yes — 100% match rate, 2,871/2,871 contacts (§3). | Directly countable; contributes **zero** identifiable loss (no mismatch exists to attribute). | **Not a contributor to the deficit.** Every contact A3-D sent in a Bucket A episode was correctly remedy-matched; the loss is entirely about contacts not sent. | **NOT SEPARABLE** from AC in `R-09`, `R-13`, `R-15` — the same ordered condition gates both which remedy to send and whether to send it at all. |
+| **Within-episode adaptive contact** | Yes — 1,341 AC-gated wakeup ticks; the `withhold_applies` predicate is directly traceable via `rationale`/`reason_code` (§4). | **Quantified for the deficit population specifically:** 59/59 (100%) of the A2-strengthened deficit and 41/47 (87.2%) of the A1 deficit are directly attributable to `R-13`'s withhold gate at day 3. | **This is the dominant identified mechanism behind the recovery deficit.** Restated with the appropriate sign, per this stage's instruction: `EVAL.md §3.4`'s third pre-registered advantage source is empirically the primary driver of A3-D's holdout *underperformance* on invoice recovery, not of an uplift. | Fused with RM in the same four rules; not separable from remedy matching in those cases, but cleanly separable from retry-window timing (disjoint rule sets except R-09/R-10). |
+
+**Overall reading, stated with the sign this stage requires:** the
+declared advantage-source structure that is most visible in A3-D's
+actual holdout behavior — within-episode adaptive contact via
+`withhold_applies` — is not associated with an uplift here. It is
+associated with the deficit. This was a foreseeable, declared tradeoff,
+not a newly discovered defect: `docs/A3-DESIGN.md §10A.5` (R-12/R-13
+basis) states plainly, before any holdout run, that "a mechanically
+earlier schedule... would likely improve A3-D's invoice recovery... it
+is declined here on identifiability grounds, not oversight," made "because
+A3-D is the control arm for A3-LLM." Stage 3 supplies the holdout-level
+quantification of exactly how much that declared, deliberate tradeoff
+cost: the majority of the measured invoice-recovery deficit against both
+comparators.
+
+**Retry-window timing and remedy matching are not associated with the
+deficit** in any measurable way this data can show — the deficit
+populations contain zero episodes from the decline buckets RWT rules
+govern, and zero remedy mismatches exist anywhere in the holdout ledger.
+
+### 6. EVAL §8 item 8 verification
+
+**Verified against implementation and actual sealed holdout ledger
+evidence, not by re-quoting `docs/A3-DESIGN.md §20`'s existing claim.**
+
+1. **Located the logic.** `src/rrx/sim/engine.py` (lines ~432–447,
+   `run_episode`) and `src/rrx/harness/runner.py` (lines 185–196,
+   `run_episode_a3`) both contain an explicit early-return for
+   `condition["kind"] == "subscription_state"` — the
+   `subscription_cancelled_by_customer` opening condition — that returns
+   `_finalize(cohort, state)` **before the day loop / tick loop begins**,
+   in both the non-agent engine and the A3-runner used by A3-D/A3-LLM.
+   Read directly from source this session, not from documentation.
+2. **Inspected actual A3-D holdout ledger/episode behavior.** Of A3-D's
+   2,000 holdout episodes, **111 (5.55%)** have
+   `opening_condition_key == "subscription_cancelled_by_customer"`
+   (`results/holdout/4d45db461943/a3_d/episode_results.jsonl`). For
+   **all 111**: `contacts_sent == 0`, and a direct scan of
+   `results/holdout/4d45db461943/a3_d/ledger.jsonl` finds **zero** ledger
+   records of any kind for any of the 111 episode ids — no `wakeup`, no
+   `no_wakeup`, no `budget_exhausted`, no `terminal_suppressed` tick, and
+   therefore no policy invocation and no `reason_code` of any kind.
+3. **A3-D's contact restraint is never triggered by this bucket, because
+   A3-D's policy function is never invoked for it at all** — not
+   "invoked and it chose WAIT," but structurally never called. This is
+   confirmed at both the code level (item 1) and the sealed-data level
+   (item 2), independently.
+4. **Contamination check: none of the 111 episodes appear in either Stage
+   2 deficit population** or, by construction, in any WAIT/`no_engagement_restraint`
+   count anywhere in §2–§4 above, because zero ledger records exist for
+   them — they cannot appear in any ledger-derived statistic. Cross-arm
+   check: A0, A1, A2-strengthened, and A4 also show `contacts_sent == 0`
+   for all 111 of the same episode indices (`episode_index` is the CRN
+   world-level pairing key, so the same 111 episodes are
+   `subscription_cancelled_by_customer` under every arm) — the
+   zero-contact outcome is identical across every arm, confirming it is
+   environmental, not policy-driven, exactly as `docs/A3-DESIGN.md §20`
+   claims. All 111 also show `invoice_recovered == False` and
+   `subscription_rescued == False` for every arm (recovery is
+   structurally impossible when no auto-charge was ever attempted).
+
+**Conclusion: the limitation is resolved, definitively, by direct
+verification against both source code and sealed holdout artifacts (not
+merely restated from existing documentation).** This bucket contributes
+**zero contamination** to any A3-D restraint statistic reported in this
+document or in `RESULTS.md` — it cannot, because it produces no ledger
+record, no wakeup tick, and no policy decision on any arm. The bucket's
+influence on aggregate rate comparisons (§4 Stage 1, `RESULTS.md`) is
+identical across all five arms (0 contacts, 0 recovery, 0 rescue, for
+all 111 episodes, all arms) and therefore cancels out of every A3-D-vs-
+comparator *difference* by construction, not merely by argument.
+
+### 7. Residual / non-separable mechanisms
+
+- **NOT SEPARABLE:** remedy matching and within-episode adaptive contact,
+  wherever both tags apply to the same rule (`R-09`, `R-13`, `R-15` —
+  132+126+112 = 370 wakeup ticks, 4.6% of all wakeups). The frozen
+  decision table gates the remedy decision and the withhold decision in
+  one ordered condition; no ledger field disentangles "the remedy would
+  have been X" from "the contact would have been withheld" as
+  independent counterfactuals for these rules.
+- **NOT SEPARABLE:** retry-window timing and remedy matching in `R-08`
+  (651 ticks) — the topup remedy and the earliest-in-window-day choice
+  are the same decision.
+- **NOT IDENTIFIABLE:** whether A2-strengthened's or A1's *own* per-episode
+  contact timing would have shown a different divergence pattern than
+  the one inferred from A3-D's side alone — no per-day comparator record
+  exists (§2, §3 comparator-limitation notes; `docs/DAY8-AUDIT-SAMPLE-RULING.md §2`).
+- **NOT IDENTIFIABLE:** whether the 12.8% (6/47 for A1; note A2-strengthened
+  has none) of the deficit population not attributable to the `R-13`
+  day-3 AC mechanism (i.e. the `ambiguous_decline` episodes, and Stage
+  2's Bucket E entirely) reflects a different mechanism this
+  rule-id-based analysis cannot see, or genuine noise. `ambiguous_decline`
+  has no day-3 rule of any kind, so nothing in the decision table offers
+  a mechanism-level explanation for those episodes' specific losses.
+
+### 8. Interpretation
+
+**Directly measured from sealed artifacts:** every rule-firing count,
+every mechanism-tag total, the 100% remedy-match rate, the 0/311 STOP
+overlap (Stage 2 §9, re-confirmed structurally consistent here since
+STOP-tagged rules R-01/R-02/R-03/R-05/R-06/R-07 are all RWT or untagged,
+never AC), the cancelled-at-open verification (§6), and the exact
+rule-at-last-wakeup distribution for both Stage 2 deficit populations.
+
+**Arithmetic decompositions:** the RM/RWT/AC mechanism totals (sums over
+rule-firing counts), the R-16-at-tick-3 CARD_BROKEN/ambiguous_decline
+split, and the 41/47 and 59/59 AC-attributable fractions of the two
+deficit populations.
+
+**Diagnostic interpretation:** that within-episode adaptive contact
+(specifically `R-13`'s day-3 withhold gate) is the dominant, empirically
+traceable mechanism behind the observed deficit; that this was a
+declared, foreseeable tradeoff rather than an undiscovered defect
+(`docs/A3-DESIGN.md §10A.5`); and that retry-window timing and remedy
+matching are both empirically clean (100% match rate; zero presence in
+either deficit population's decline-code composition) and therefore not
+implicated in the underperformance. **Do not read "within-episode
+adaptive contact caused the deficit" as "the mechanism is broken"** — it
+functioned exactly as designed (§10A.3's predicate fired precisely when
+its own stated conditions held); the finding is that the deliberate
+design choice to keep this predicate active and use A2-strengthened's
+schedule unchanged (rather than adopt a mechanically stronger,
+front-loaded schedule that `docs/A3-DESIGN.md §10A.5` explicitly
+identified and declined, for identifiability reasons, before any result
+existed) is what cost A3-D the majority of its measured invoice-recovery
+deficit.
