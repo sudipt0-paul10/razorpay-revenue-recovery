@@ -1,5 +1,124 @@
 # Changelog
 
+## Day 10 — monetary-analysis authorization + documentation reconciliation — 2026-08-31
+
+**Status: an authorization record and a documentation-synchronization pass.
+NOT an `eval-spec` amendment, NOT a methodology change, and NOT a new
+evaluation.** No spec version opened or bumped. No file under `src/rrx/`, no
+test, no `EVAL.md` methodology text, and no holdout artifact changed. No
+simulator run, no evaluation run, no holdout rerun.
+
+### Authorization declared
+
+Day 10 was authorized to perform a **post-hoc descriptive aggregation** of the
+already-sealed holdout artifacts of run `4d45db461943` — specifically the
+per-arm `episode_results.jsonl` files — for the single purpose of quantifying
+the **monetary invoice value recovered** by each official arm. The result is
+recorded in `docs/analysis/DAY10-VALUE.md`, reproduced by
+`scripts/day10_value.py`.
+
+The scope and limits of that authorization, stated explicitly:
+
+- It is a **descriptive aggregation of existing sealed fields**, not a new
+  evaluation. No arm, threshold, prompt, config, comparator, or seed was
+  changed; `rrx.harness.splits.holdout_indices` was never called; the
+  analysis script imports no `rrx` module.
+- It is **not a pre-registered primary metric**. `EVAL.md §7`'s criteria are
+  closed and were not amended, extended, or reinterpreted. The monetary
+  figures create no new pass/fail criterion and have no power to revise
+  A3-D's criterion 2 FAIL verdict, which stands exactly as recorded in
+  `RESULTS.md §1`–`§13`.
+- It **did not rerun or alter the holdout**. The 21-artifact `SHA256SUMS`
+  seal was verified 21/21 OK before any episode data was read, and verified
+  21/21 OK again afterwards. No file under `results/holdout/` was modified.
+- Its **purpose** was to quantify monetary invoice value recovered — the ₹
+  denomination that `RESULTS.md` and `LIMITATIONS.md` had previously
+  disclosed as missing, and which the track's stated bar asks for.
+- It **supersedes the Day 9 Stage 1 boundary** that had declined per-episode
+  monetary aggregation at that stage. `docs/analysis/DAY9-NET-VALUE.md §1`,
+  `§5.1` and `§7` limitation 1 recorded that Stage 1's authorization forbade
+  deriving new statistics from
+  `results/holdout/4d45db461943/*/episode_results.jsonl`, and Stage 1 therefore
+  substituted two labeled population-level reference values and reported a
+  bracketed break-even range. That boundary was a **stage authorization
+  limit, not a methodological prohibition**, and Day 10's authorization
+  lifts it for this one descriptive purpose only.
+
+**Historical Day 9 text is not rewritten.** `docs/analysis/DAY9-NET-VALUE.md`
+is unchanged. The apparent contradiction between its §7 limitation 1 and the
+existence of `DAY10-VALUE.md` is resolved by this entry — a dated, stated
+change of authorization — rather than by editing the earlier document.
+
+Nothing else in the Day 9 contamination rules is relaxed: no holdout index is
+re-drawn, no new statistical test or confidence interval is constructed on any
+monetary quantity, and no DEV figure appears in the Day 10 analysis.
+
+### Break-even reconciliation
+
+Day 9 Stage 1 could not measure the arm-conditional value of a marginal
+recovery and bracketed the break-even effective contact cost:
+
+| | vs A1 | vs A2-strengthened |
+|---|---:|---:|
+| Day 9 bracketed estimate | ₹92.58 – ₹152.64 | ₹134.50 – ₹221.75 |
+| Day 10 measured value | **₹154.81** | **₹236.25** |
+
+The Day 10 measured values **supersede the Day 9 brackets for current post-hoc
+economic interpretation**. The Day 9 bracket is retained as historical context
+wherever it appears and is labeled as the earlier bracketed estimate; it is not
+deleted, and it was not wrong in direction — both measured values land modestly
+*above* Day 9's upper bounds, so Day 9's population-level reference slightly
+understated the deficit. The conclusion is strengthened, not revised: the
+contact-cost saving remains roughly two orders of magnitude short of covering
+the forfeited recovery value.
+
+### Cost-model distinction preserved
+
+The registered effective contact cost of **₹1.115** is not purely a cash
+outflow, and is not described as one anywhere this reconciliation touches:
+
+- **₹0.115** — `CITE`-labeled WhatsApp utility-message price. This is the
+  only cash component.
+- **₹1.00** — `ASSUMPTION`-labeled synthetic annoyance penalty.
+
+Both components are registered in `configs/costs.yaml`. `DAY10-VALUE.md §4`
+reports the cash-only and effective contact-cost savings separately (₹104.31
+and ₹1,011.30 vs A1) because the distinction changes the saving by an order of
+magnitude — and does not change the conclusion at either value.
+
+### What changed in this pass
+
+- `CHANGELOG.md` — this entry (written **before** the documentation edits
+  below, as a pre-declaration).
+- `RESULTS.md §14.1` — the Day 9 bracketed break-even figures are retained and
+  relabeled as the earlier bracketed estimate; the Day 10 measured figures are
+  added as superseding for current economic interpretation; the ₹1.115
+  component split is made explicit.
+- `docs/PITCH.md` — the spoken economic statement in §7 no longer presents the
+  obsolete Day 9 bracket as the latest measured result; the citation table,
+  demo-artifact pointer, and the "does not claim" list are reconciled with it.
+
+### What did not change
+
+- `src/`, `tests/`, `EVAL.md` methodology, and every frozen holdout artifact.
+- `README.md` — deliberately not modified in this pass.
+- `docs/analysis/DAY9-NET-VALUE.md` and all other historical Day 9 documents.
+- `RESULTS.md §1`–`§13`, A3-D's criterion 2 FAIL verdict, `EVAL.md §7`'s
+  criteria, `A3-D` itself, and the registered cost model.
+- No `A3.1` or retuned variant exists or was created.
+- No new experiment was run and no metric beyond the already-computed Day 10
+  monetary analysis was added.
+- Every previously disclosed-but-unresolved limitation remains open and
+  disclosed, including the missing `eval-spec` tags, the holdout
+  `run_params.json` metadata defect, the GPT-C1–C6 methodology-integrity
+  question, and the sensitivity sweep's 0/26 status.
+
+### Verification
+
+`sha256sum -c results/holdout/4d45db461943/SHA256SUMS` → 21/21 OK, before and
+after. `git status` shows no change under `results/holdout/`. `ruff check .`
+passes.
+
 ## Day 9 Stage 7 — documentation reconciliation — 2026-08-31
 
 **Status: a documentation-synchronization pass, NOT an `eval-spec` amendment
