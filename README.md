@@ -84,7 +84,7 @@ This is not spun as a success. `EVAL.md §7` itself pre-committed to this outcom
 Post-hoc diagnostic analysis of the sealed holdout artifacts (Day 9, `docs/analysis/`) — descriptive, not a new evaluation, and it changes nothing about the result above:
 
 1. **A3-D's restraint reduced contacts substantially** — 2,871 vs. 3,626–3,778 for the comparators, a 21–24% reduction.
-2. **That contact reduction did not economically compensate for the lost invoice recovery.** Under the registered cost model, the break-even contact cost needed to justify the tradeoff is roughly 83×–199× the actual registered cost (`docs/analysis/DAY9-NET-VALUE.md`).
+2. **That contact reduction did not economically compensate for the lost invoice recovery.** Under the registered cost model, the break-even contact cost needed to justify the tradeoff is roughly 83×–199× the actual registered cost (`docs/analysis/DAY9-NET-VALUE.md`'s earlier bracketed estimate) — since measured precisely at **139× vs. A1** and **212× vs. A2-strengthened** (`docs/analysis/DAY10-VALUE.md`).
 3. **The dominant loss mechanism was A3-D's day-3 withhold predicate** — a within-episode adaptive-contact rule that declines a second contact after two unengaged observations, in episodes where the comparator's own (unconditional or differently-timed) contact went on to recover the invoice (`docs/analysis/DAY9-DECOMPOSITION.md`).
 4. **Against A2-strengthened, 59/59 comparator-only recoveries traced to exactly this mechanism** — a complete, single-cause explanation for that comparator's entire deficit.
 5. **STOP was not the cause.** Zero of A3-D's 311 holdout STOP actions overlapped with a lost-recovery episode against either comparator — the deficit is driven by declined contacts (WAIT), not active disengagement.
@@ -153,7 +153,7 @@ python scripts/day9_frontier.py             # dev-only threshold sweep; never to
 - Sensitivity analysis is 0/26 cells complete.
 - Two failure modes (budget exhaustion, mid-episode state change) are structurally handled or architecturally unreachable rather than runtime-tested.
 - One decision-table default-fallthrough case (`R-16` for `ambiguous_decline` on day 3) is design-ambiguous rather than confirmed intentional.
-- No aggregate ₹-recovered headline figure is currently published — only recovery *rates* and a registered but unapplied cost model.
+- An aggregate ₹-recovered headline figure now exists (`RESULTS.md §14.1`, `docs/analysis/DAY10-VALUE.md`) — a **post-hoc descriptive aggregation** of the sealed holdout artifacts, **not** a pre-registered `EVAL.md §7` metric, and carrying **no confidence interval**.
 
 Full detail, including severity classification for each item: [`LIMITATIONS.md`](LIMITATIONS.md), [`docs/analysis/DAY9-BAR-COMPLIANCE.md`](docs/analysis/DAY9-BAR-COMPLIANCE.md).
 
